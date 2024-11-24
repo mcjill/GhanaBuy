@@ -1,6 +1,7 @@
 import { BaseScraper, Selectors } from './base-scraper';
 import type { Product, ScrapingResult } from './types';
-import * as cheerio from 'cheerio';
+import { load } from 'cheerio';
+import type { CheerioAPI } from 'cheerio';
 
 export class JijiScraper extends BaseScraper {
   protected readonly store = 'Jiji Ghana';
@@ -60,7 +61,7 @@ export class JijiScraper extends BaseScraper {
       }
 
       const html = await response.text();
-      const $ = cheerio.load(html);
+      const $: CheerioAPI = load(html);
 
       const products: Product[] = [];
       const items = $(this.selectors.productItem);
