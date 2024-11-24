@@ -20,8 +20,14 @@ export class JijiScraper extends BaseScraper {
     try {
       console.log(`[JijiScraper] Starting search for: ${query}`);
       
-      // Use the server-side API route
-      const response = await fetch(`/api/jiji?query=${encodeURIComponent(query)}`, {
+      // Get the current hostname
+      const host = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+      const apiUrl = `${host}/api/jiji?query=${encodeURIComponent(query)}`;
+      
+      console.log(`[JijiScraper] Calling API: ${apiUrl}`);
+      
+      // Use the server-side API route with absolute URL
+      const response = await fetch(apiUrl, {
         method: 'GET',
         headers: {
           'Accept': 'application/json'

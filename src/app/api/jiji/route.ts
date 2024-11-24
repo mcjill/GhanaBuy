@@ -2,12 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import * as cheerio from 'cheerio';
 import { Product } from '@/lib/scrapers/types';
 
+export const dynamic = 'force-dynamic'; // Disable caching for this route
+export const fetchCache = 'force-no-store';
+export const revalidate = 0;
+
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const query = searchParams.get('query');
 
     if (!query) {
+      console.error('No query parameter provided');
       return NextResponse.json({ 
         success: false, 
         error: 'Query parameter is required' 
@@ -35,7 +40,8 @@ export async function GET(request: NextRequest) {
     if (!response.ok) {
       console.error('Failed to fetch from Jiji:', {
         status: response.status,
-        statusText: response.statusText
+        statusText: response.statusText,
+        url: searchUrl
       });
       return NextResponse.json({ 
         success: false, 
@@ -44,12 +50,29 @@ export async function GET(request: NextRequest) {
     }
 
     const html = await response.text();
-    const $ = cheerio.load(html);
+    
+    if (html.includes('Access to this page has been denied')) {
+      console.error('Access denied by Jiji');
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Access denied by Jiji. Please try again later.' 
+      }, { status: 403 });
+    }
 
+    const $ = cheerio.load(html);
     const products: Product[] = [];
     const items = $('.qa-advert-list-item');
 
     console.log(`Found ${items.length} items on Jiji`);
+
+    if (items.length === 0) {
+      console.log('No products found. HTML snippet:', html.substring(0, 500));
+      return NextResponse.json({
+        success: false,
+        error: 'No products found',
+        products: []
+      });
+    }
 
     items.each((_, element) => {
       try {
@@ -85,8 +108,18 @@ export async function GET(request: NextRequest) {
       }
     });
 
+    if (products.length === 0) {
+      console.error('No valid products extracted from HTML');
+      return NextResponse.json({
+        success: false,
+        error: 'No valid products found',
+        products: []
+      });
+    }
+
+    console.log(`Successfully extracted ${products.length} products from Jiji`);
     return NextResponse.json({
-      success: products.length > 0,
+      success: true,
       products,
       error: null
     });
@@ -94,7 +127,8 @@ export async function GET(request: NextRequest) {
     console.error('Error in Jiji API route:', error);
     return NextResponse.json({ 
       success: false, 
-      error: error instanceof Error ? error.message : 'Unknown error occurred' 
+      error: error instanceof Error ? error.message : 'Unknown error occurred',
+      products: []
     }, { status: 500 });
   }
 }
