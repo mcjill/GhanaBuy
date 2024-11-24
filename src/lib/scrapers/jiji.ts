@@ -23,19 +23,13 @@ export class JijiScraper extends BaseScraper {
 
   protected getHeaders(): HeadersInit {
     return {
-      ...super.getHeaders(),
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-      'Accept-Language': 'en-GB,en-US;q=0.9,en;q=0.8',
-      'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-      'Sec-Ch-Ua-Mobile': '?0',
-      'Sec-Ch-Ua-Platform': '"macOS"',
-      'Sec-Fetch-Dest': 'document',
-      'Sec-Fetch-Mode': 'navigate',
-      'Sec-Fetch-Site': 'same-origin',
-      'Sec-Fetch-User': '?1',
-      'Upgrade-Insecure-Requests': '1',
-      'Referer': 'https://jiji.com.gh/',
-      'Cookie': 'locale=en'
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Accept-Encoding': 'gzip, deflate, br',
+      'Connection': 'keep-alive',
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache'
     };
   }
 
@@ -48,7 +42,10 @@ export class JijiScraper extends BaseScraper {
       const response = await fetch(searchUrl, {
         headers: this.getHeaders(),
         cache: 'no-store',
-        next: { revalidate: 0 }
+        next: { revalidate: 0 },
+        credentials: 'omit',
+        mode: 'cors',
+        referrerPolicy: 'no-referrer'
       });
 
       if (!response.ok) {
@@ -96,15 +93,7 @@ export class JijiScraper extends BaseScraper {
               reviews: 0,
               availability: true
             };
-            console.log(`[JijiScraper] Found product:`, product);
             products.push(product);
-          } else {
-            console.log(`[JijiScraper] Skipping product due to missing data:`, {
-              title,
-              price,
-              imageUrl,
-              productUrl
-            });
           }
         } catch (error) {
           console.error('[JijiScraper] Error processing item:', error);
@@ -115,14 +104,14 @@ export class JijiScraper extends BaseScraper {
       return {
         success: products.length > 0,
         products,
-        error: null,
+        error: null
       };
     } catch (error) {
       console.error('[JijiScraper] Error:', error);
       return {
         success: false,
         products: [],
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
+        error: error instanceof Error ? error.message : 'Unknown error occurred'
       };
     }
   }
@@ -147,7 +136,6 @@ export class JijiScraper extends BaseScraper {
   }
 
   protected cleanPrice(price: string): number {
-    // Remove currency symbol and any non-numeric characters except decimal point
     const numericString = price.replace(/[^0-9.]/g, '');
     const parsedPrice = parseFloat(numericString);
     return isNaN(parsedPrice) ? 0 : parsedPrice;

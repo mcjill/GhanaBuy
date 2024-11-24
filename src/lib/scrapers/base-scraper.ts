@@ -29,16 +29,12 @@ export abstract class BaseScraper {
   protected getHeaders(): HeadersInit {
     return {
       'User-Agent': this.userAgent,
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-      'Accept-Language': 'en-US,en;q=0.5',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'en-US,en;q=0.9',
       'Accept-Encoding': 'gzip, deflate, br',
       'Connection': 'keep-alive',
-      'Upgrade-Insecure-Requests': '1',
-      'Sec-Fetch-Dest': 'document',
-      'Sec-Fetch-Mode': 'navigate',
-      'Sec-Fetch-Site': 'none',
-      'Sec-Fetch-User': '?1',
-      'Cache-Control': 'max-age=0'
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache'
     };
   }
 
@@ -51,7 +47,10 @@ export abstract class BaseScraper {
         async () => {
           const res = await fetch(searchUrl, {
             headers: this.getHeaders(),
-            cache: 'no-store'
+            cache: 'no-store',
+            credentials: 'omit',
+            mode: 'cors',
+            referrerPolicy: 'no-referrer'
           });
           
           if (!res.ok) {
@@ -86,7 +85,6 @@ export abstract class BaseScraper {
 
       if (items.length === 0) {
         console.log(`No products found for query: ${query} on ${this.store}`);
-        console.log('HTML response:', html.substring(0, 500)); // Log first 500 chars of response
         return { products: [], error: 'No products found', success: false };
       }
 
@@ -113,7 +111,6 @@ export abstract class BaseScraper {
           }
 
           const price = this.cleanPrice(priceText);
-          console.log(`Extracted product from ${this.store}:`, { title, price, url });
 
           if (title && price > 0) {
             products.push({
