@@ -1,0 +1,267 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import './animations.css';
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+ 
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+ 
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+ 
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+ 
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+ 
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+ 
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+ 
+    --radius: 0.5rem;
+    --foreground-rgb: 0, 0, 0;
+    --background-start-rgb: 214, 219, 220;
+    --background-end-rgb: 255, 255, 255;
+    --textarea-background: 255, 255, 255;
+    --textarea-foreground: 0, 0, 0;
+    --textarea-placeholder: 173, 173, 173;
+    --textarea-border: 214, 219, 220;
+    --textarea-focus-ring: 222.2 84% 4.9%;
+  }
+ 
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+ 
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+ 
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+ 
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+ 
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+ 
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+ 
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+ 
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+ 
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
+    --textarea-background: 222.2 84% 4.9%;
+    --textarea-foreground: 210 40% 98%;
+    --textarea-placeholder: 215 20.2% 65.1%;
+    --textarea-border: 217.2 32.6% 17.5%;
+    --textarea-focus-ring: 212.7 26.8% 83.9%;
+  }
+}
+
+/* Apple-inspired Typography */
+h1 {
+  letter-spacing: -0.025em;
+  font-feature-settings: "ss01" 1, "ss02" 1, "ss03" 1;
+}
+
+h2, h3, h4, h5, h6 {
+  letter-spacing: -0.015em;
+  font-feature-settings: "ss01" 1, "ss02" 1;
+}
+
+p {
+  letter-spacing: -0.005em;
+}
+
+/* Apple-inspired Button Styles */
+.btn-primary {
+  @apply inline-flex h-12 items-center justify-center rounded-[980px] bg-gray-900 px-7 text-[17px] font-medium tracking-[-.022em] text-white transition-transform hover:scale-[1.02] active:scale-[.96];
+}
+
+.btn-secondary {
+  @apply inline-flex h-12 items-center justify-center rounded-[980px] bg-gray-100 px-7 text-[17px] font-medium tracking-[-.022em] text-gray-900 transition-transform hover:scale-[1.02] active:scale-[.96];
+}
+
+/* Apple-inspired Navigation */
+.nav-link {
+  @apply text-[12px] font-medium leading-[1.33337] tracking-[-.01em] transition-colors;
+}
+
+.nav-link-active {
+  @apply text-gray-900;
+}
+
+.nav-link-inactive {
+  @apply text-gray-500 hover:text-gray-900;
+}
+
+/* Apple-inspired Container */
+.container-apple {
+  @apply max-w-[980px] mx-auto px-4;
+}
+
+/* Apple-inspired Hero Text */
+.hero-heading {
+  @apply text-[48px] leading-[1.0834933333] font-semibold tracking-[-.003em] text-gray-900;
+}
+
+.hero-subtext {
+  @apply text-[21px] leading-[1.381002381] font-normal tracking-[.011em] text-gray-500;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Custom Gradients */
+.bg-gradient-text {
+  background: linear-gradient(135deg, #2563EB 0%, #1E40AF 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-fill-color: transparent;
+  text-shadow: 0 2px 10px rgba(37, 99, 235, 0.1);
+}
+
+.gradient-bg {
+  @apply bg-gradient-to-r from-blue-600 to-purple-600;
+}
+
+.gradient-border {
+  @apply border-transparent bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-border;
+}
+
+/* Animations */
+.animate-in {
+  animation: animate-in 0.5s ease-out;
+}
+
+@keyframes animate-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes breathing {
+  0% {
+    transform: scale(1) translateY(0);
+  }
+  50% {
+    transform: scale(1.03) translateY(-3px);
+  }
+  100% {
+    transform: scale(1) translateY(0);
+  }
+}
+
+.memoji-breathing {
+  animation: breathing 4s ease-in-out infinite;
+  will-change: transform;
+}
+
+/* Add different animation delays for variety */
+.memoji-breathing:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.memoji-breathing:nth-child(2) {
+  animation-delay: -1s;
+}
+
+.memoji-breathing:nth-child(3) {
+  animation-delay: -2s;
+}
+
+.memoji-breathing:nth-child(4) {
+  animation-delay: -3s;
+}
+
+/* Glassmorphism Effects */
+.glass-nav {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+  transition: all 0.3s ease-in-out;
+}
+
+.glass-nav.scrolled {
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.05);
+}
+
+/* Navigation Links */
+.nav-link {
+  @apply text-sm font-medium transition-colors duration-200;
+}
+
+.nav-link-active {
+  @apply text-blue-600;
+  position: relative;
+}
+
+.nav-link-active::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, #2563EB, #1E40AF);
+  border-radius: 2px;
+}
+
+.nav-link-inactive {
+  @apply text-gray-600 hover:text-gray-900;
+}
+
+/* Button Styles */
+.btn-primary {
+  @apply bg-blue-600 text-white rounded-full px-6 py-2 font-medium 
+         transition-all duration-200 hover:bg-blue-700 
+         focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2;
+}
+
+.btn-secondary {
+  @apply bg-gray-100 text-gray-900 rounded-full px-6 py-2 font-medium 
+         transition-all duration-200 hover:bg-gray-200 
+         focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2;
+}
+
+/* Container */
+.container-apple {
+  @apply max-w-[1020px] mx-auto px-4 sm:px-6;
+}
