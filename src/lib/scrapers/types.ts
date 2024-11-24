@@ -1,26 +1,29 @@
 export interface Product {
   title: string;
   price: number;
-  url: string;
-  image: string;
+  currency: string;
+  imageUrl: string;
+  productUrl: string;
   store: string;
-  rating: number;
-  reviews: number;
-  currency?: string;
+  rating?: number;
+  reviews?: number;
   availability?: boolean;
-  description?: string;
-  timestamp?: number;
 }
 
 export interface ScrapingResult {
+  success: boolean;
   products: Product[];
-  error?: string;
-  source?: string;
-  timestamp?: number;
+  error: string | null;
+}
+
+export interface SearchRequest {
+  query: string;
+  budget?: number;
+  currency?: string;
 }
 
 export interface Scraper {
-  scrape: (query: string) => Promise<ScrapingResult>;
+  scrape: (query: SearchRequest) => Promise<ScrapingResult>;
   name: string;
   baseUrl: string;
   cleanPrice: (price: string) => number;

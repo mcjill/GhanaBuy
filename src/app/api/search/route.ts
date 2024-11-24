@@ -324,6 +324,18 @@ async function scrapeAliExpress(query: string): Promise<Product[]> {
   }
 }
 
+interface Product {
+  title: string;
+  price: number;
+  currency: string;
+  image: string;
+  url: string;
+  store: string;
+  rating?: number;
+  reviews?: number;
+  availability?: boolean;
+}
+
 export async function POST(request: Request) {
   try {
     const { query, budget, currency = 'GHS' } = await request.json() as SearchRequest;
@@ -346,7 +358,7 @@ export async function POST(request: Request) {
       );
     }
 
-    let products = results.products;
+    let products: Product[] = results.products;
 
     // Filter by budget if specified
     if (budget) {
@@ -373,23 +385,46 @@ export async function POST(request: Request) {
 
 // Add GET method support for flexibility
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const query = searchParams.get('q');
-  const budget = searchParams.get('budget') ? parseFloat(searchParams.get('budget')!) : undefined;
-  const currency = searchParams.get('currency') || 'GHS';
+  try {
+    const { searchParams } = new URL(request.url);
+    const query = searchParams.get('query');
+    const budget = searchParams.get('budget') ? parseFloat(searchParams.get('budget')!) : undefined;
+    const currency = searchParams.get('currency') || 'GHS';
 
-  if (!query) {
+    if (!query) {
+      return NextResponse.json(
+        { error: 'Query parameter "query" is required' },
+        { status: 400 }
+      );
+    }
+
+    console.log(`Searching for: ${query}`);
+
+    const jijiResults = await scrapeJiji(query);
+
+    if (!jijiResults.length) {
+      console.error('Error from Jiji scraper:', 'No results found');
+      return NextResponse.json({ error: 'Failed to fetch results' }, { status: 500 });
+    }
+
+    const products: Product[] = jijiResults.map(product => ({
+      title: product.title,
+      price: product.price,
+      currency: product.currency,
+      image: product.image,
+      url: product.url,
+      store: product.store,
+      rating: 0,
+      reviews: 0,
+      availability: true
+    }));
+
+    return NextResponse.json({ products });
+  } catch (error) {
+    console.error('Search error:', error);
     return NextResponse.json(
-      { error: 'Query parameter "q" is required' },
-      { status: 400 }
+      { error: error instanceof Error ? error.message : 'An error occurred' },
+      { status: 500 }
     );
   }
-
-  // Reuse the POST logic by creating a new request
-  const postRequest = new Request(request.url, {
-    method: 'POST',
-    body: JSON.stringify({ query, budget, currency })
-  });
-
-  return POST(postRequest);
 }
