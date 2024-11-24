@@ -66,10 +66,10 @@ export abstract class BaseScraper {
           return res;
         },
         {
-          retries: 3,
-          minTimeout: 1000,
-          maxTimeout: 5000,
-          onRetry: (error, attempt) => {
+          attempts: 3,
+          delay: 1000,
+          factor: 2,
+          onAttemptFailed: (error, attempt) => {
             console.log(`Retrying ${this.store} scrape attempt ${attempt} after error:`, error);
           }
         }
