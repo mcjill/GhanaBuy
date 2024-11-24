@@ -16,42 +16,69 @@ export class JijiScraper extends BaseScraper {
     reviews: undefined
   };
 
+  private async getApiUrl(): Promise<string> {
+    // For server-side rendering or development
+    if (typeof window === 'undefined') {
+      return 'http://localhost:3000';
+    }
+    // For client-side, use the current origin
+    return window.location.origin;
+  }
+
   async search(query: string): Promise<ScrapingResult> {
     try {
       console.log(`[JijiScraper] Starting search for: ${query}`);
       
-      // Get the current hostname
-      const host = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+      const host = await this.getApiUrl();
       const apiUrl = `${host}/api/jiji?query=${encodeURIComponent(query)}`;
       
       console.log(`[JijiScraper] Calling API: ${apiUrl}`);
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30000);
       
-      // Use the server-side API route with absolute URL
-      const response = await fetch(apiUrl, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json'
+      try {
+        const response = await fetch(apiUrl, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json'
+          },
+          signal: controller.signal,
+          cache: 'no-store',
+          next: { revalidate: 0 }
+        });
+
+        clearTimeout(timeout);
+
+        if (!response.ok) {
+          const error = await response.text();
+          console.error('[JijiScraper] API request failed:', error);
+          throw new Error(`Failed to fetch from Jiji: ${response.statusText}`);
         }
-      });
 
-      if (!response.ok) {
-        const error = await response.text();
-        console.error('[JijiScraper] API request failed:', error);
-        throw new Error(`Failed to fetch from Jiji: ${response.statusText}`);
+        const data = await response.json();
+        console.log(`[JijiScraper] API response:`, data);
+
+        if (!data.success) {
+          throw new Error(data.error || 'Failed to fetch products from Jiji');
+        }
+
+        return {
+          success: true,
+          products: data.products,
+          error: null
+        };
+      } catch (fetchError) {
+        clearTimeout(timeout);
+        if (fetchError.name === 'AbortError') {
+          return {
+            success: false,
+            products: [],
+            error: 'Request timed out while fetching from Jiji'
+          };
+        }
+        throw fetchError;
       }
-
-      const data = await response.json();
-      console.log(`[JijiScraper] API response:`, data);
-
-      if (!data.success) {
-        throw new Error(data.error || 'Failed to fetch products from Jiji');
-      }
-
-      return {
-        success: true,
-        products: data.products,
-        error: null
-      };
     } catch (error) {
       console.error('[JijiScraper] Error:', error);
       return {
