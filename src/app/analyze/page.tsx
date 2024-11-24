@@ -32,13 +32,21 @@ interface ExchangeRate {
   lastUpdated: string;
 }
 
+interface AnalysisResult {
+  type: 'success' | 'warning' | 'error' | 'info';
+  title: string;
+  summary: string;
+  details: string[];
+  suggestion: string;
+}
+
 export default function AnalyzePage() {
   const [monthlyIncome, setMonthlyIncome] = useState('');
   const [monthlyExpenses, setMonthlyExpenses] = useState('');
   const [budget, setBudget] = useState('');
   const [productSearch, setProductSearch] = useState('');
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<any>('');
+  const [result, setResult] = useState<AnalysisResult | null>(null);
   const [affordableProducts, setAffordableProducts] = useState<Product[]>([]);
   const [alternativeSuggestions, setAlternativeSuggestions] = useState<Product[]>([]);
   const [showAlternatives, setShowAlternatives] = useState(false);
@@ -202,7 +210,7 @@ export default function AnalyzePage() {
         // Enhanced analysis for affordable items
         const affordabilityPercentage = (targetBudget / disposableIncome) * 100;
         
-        let analysisResult = {
+        let analysisResult: AnalysisResult = {
           type: 'success',
           title: 'Affordability Analysis',
           summary: '',
@@ -417,7 +425,7 @@ export default function AnalyzePage() {
                 </p>
 
                 <div className="space-y-2 py-3">
-                  {result.details.map((detail, index) => (
+                  {result.details.map((detail: string, index: number) => (
                     <p key={index} className="text-gray-600">
                       {detail}
                     </p>
