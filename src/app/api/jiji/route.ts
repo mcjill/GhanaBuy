@@ -2,12 +2,31 @@ import { NextRequest, NextResponse } from 'next/server';
 import * as cheerio from 'cheerio';
 import { Product } from '@/lib/scrapers/types';
 
+// Disable caching
 export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
 export const revalidate = 0;
 
+// CORS headers
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
+
+// Handle OPTIONS request for CORS
+export async function OPTIONS() {
+  return NextResponse.json({}, { headers: corsHeaders });
+}
+
 export async function GET(request: NextRequest) {
   try {
+    // Add CORS headers to the response
+    const headers = {
+      ...corsHeaders,
+      'Content-Type': 'application/json',
+    };
+
     const searchParams = request.nextUrl.searchParams;
     const query = searchParams.get('query');
 
@@ -15,8 +34,9 @@ export async function GET(request: NextRequest) {
       console.error('[Jiji API] No query parameter provided');
       return NextResponse.json({ 
         success: false, 
-        error: 'Query parameter is required' 
-      }, { status: 400 });
+        error: 'Query parameter is required',
+        products: [] 
+      }, { status: 400, headers });
     }
 
     console.log('[Jiji API] Processing search query:', query);
@@ -27,14 +47,12 @@ export async function GET(request: NextRequest) {
     console.log('[Jiji API] Fetching URL:', searchUrl);
 
     const response = await fetch(searchUrl, {
+      method: 'GET',
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko)',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.9',
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache'
       },
-      cache: 'no-store'
     });
 
     if (!response.ok) {
@@ -45,8 +63,9 @@ export async function GET(request: NextRequest) {
       });
       return NextResponse.json({ 
         success: false, 
-        error: `Failed to fetch from Jiji: ${response.statusText}` 
-      }, { status: response.status });
+        error: `Failed to fetch from Jiji: ${response.statusText}`,
+        products: []
+      }, { status: response.status, headers });
     }
 
     const html = await response.text();
@@ -55,16 +74,18 @@ export async function GET(request: NextRequest) {
       console.error('[Jiji API] Empty response received');
       return NextResponse.json({ 
         success: false, 
-        error: 'Empty response from Jiji' 
-      }, { status: 500 });
+        error: 'Empty response from Jiji',
+        products: []
+      }, { status: 500, headers });
     }
 
     if (html.includes('Access to this page has been denied')) {
       console.error('[Jiji API] Access denied by Jiji');
       return NextResponse.json({ 
         success: false, 
-        error: 'Access denied by Jiji. Please try again later.' 
-      }, { status: 403 });
+        error: 'Access denied by Jiji. Please try again later.',
+        products: []
+      }, { status: 403, headers });
     }
 
     const $ = cheerio.load(html);
@@ -79,7 +100,7 @@ export async function GET(request: NextRequest) {
         success: true,
         error: null,
         products: []
-      });
+      }, { headers });
     }
 
     items.each((_, element) => {
@@ -121,7 +142,7 @@ export async function GET(request: NextRequest) {
       success: true,
       products,
       error: null
-    });
+    }, { headers });
 
   } catch (error) {
     console.error('[Jiji API] Unexpected error:', error);
@@ -129,6 +150,6 @@ export async function GET(request: NextRequest) {
       success: false, 
       error: error instanceof Error ? error.message : 'Unknown error occurred',
       products: []
-    }, { status: 500 });
+    }, { status: 500, headers: corsHeaders });
   }
 }

@@ -16,53 +16,32 @@ export class JijiScraper extends BaseScraper {
     reviews: undefined
   };
 
-  private async getApiUrl(): Promise<string> {
-    if (typeof window === 'undefined') {
-      return 'http://localhost:3000';
-    }
-    return window.location.origin;
-  }
-
   async search(query: string): Promise<ScrapingResult> {
     try {
       console.log(`[JijiScraper] Starting search for: ${query}`);
       
-      const host = await this.getApiUrl();
-      const apiUrl = `${host}/api/jiji?query=${encodeURIComponent(query)}`;
-      
-      console.log(`[JijiScraper] Calling API: ${apiUrl}`);
-
-      // Use a more basic fetch configuration for production
-      const response = await fetch(apiUrl, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        },
-        // Remove cache and next config as they might cause issues in production
-        credentials: 'same-origin'
-      });
+      // Use relative URL - this will work in both development and production
+      const response = await fetch(`/api/jiji?query=${encodeURIComponent(query)}`);
 
       if (!response.ok) {
         console.error('[JijiScraper] API request failed:', {
           status: response.status,
           statusText: response.statusText
         });
-        throw new Error(`Failed to fetch from Jiji: ${response.statusText}`);
+        return {
+          success: false,
+          products: [],
+          error: `Failed to fetch from Jiji: ${response.statusText}`
+        };
       }
 
       const data = await response.json();
       console.log(`[JijiScraper] API response:`, data);
 
-      if (!data.success) {
-        throw new Error(data.error || 'Failed to fetch products from Jiji');
-      }
-
       return {
-        success: true,
-        products: data.products,
-        error: null
+        success: data.success,
+        products: data.products || [],
+        error: data.error || null
       };
     } catch (error) {
       console.error('[JijiScraper] Error:', error);
