@@ -18,25 +18,38 @@ const nextConfig = {
       'lh3.googleusercontent.com',
       'jiji.com.gh',
       'pictures-ghana.jiji.ng',
-      'static-gh.jiji.ng'
+      'static-gh.jiji.ng',
+      'media.jiji.ng',
+      'pictures.jiji.ng'
     ],
-    unoptimized: true
+    unoptimized: process.env.NODE_ENV === 'development'
   },
-  webpack: (config) => {
-    config.module.rules.push({
-      test: /\.svg$/,
-      use: ['@svgr/webpack'],
-    });
-    config.resolve.fallback = {
-      ...config.resolve.fallback,
-      net: false,
-      dns: false,
-      tls: false,
-      fs: false,
-      path: false
+  webpack: (config, { dev, isServer }) => {
+    // Add polyfills for fetch in production
+    if (!dev && !isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        net: false,
+        tls: false,
+      };
     }
-    return config
-  }
-}
 
-module.exports = nextConfig
+    return config;
+  },
+  async headers() {
+    return [
+      {
+        source: '/api/:path*',
+        headers: [
+          { key: 'Access-Control-Allow-Credentials', value: 'true' },
+          { key: 'Access-Control-Allow-Origin', value: '*' },
+          { key: 'Access-Control-Allow-Methods', value: 'GET,POST,OPTIONS' },
+          { key: 'Access-Control-Allow-Headers', value: 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version' },
+        ],
+      },
+    ];
+  }
+};
+
+module.exports = nextConfig;
