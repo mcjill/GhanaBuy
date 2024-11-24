@@ -7,16 +7,22 @@ export class JijiScraper extends BaseScraper {
   protected readonly baseUrl = 'https://jiji.com.gh';
   protected readonly currency = 'GHS';
   protected readonly selectors: Selectors = {
-    productItem: '.b-list-advert__item-wrapper',
-    productTitle: '.qa-advert-title',
-    productPrice: '.qa-advert-price',
-    productImage: '.b-advert-link-wrapper img',
-    productLink: '.b-advert-title-wrapper a',
+    productGrid: '.qa-advert-list',
+    productItem: '.qa-advert-list-item',
+    title: '.qa-advert-title',
+    price: '.qa-advert-price',
+    url: 'a',
+    image: 'img',
+    rating: undefined,
+    reviews: undefined
   };
 
   async search(query: string): Promise<ScrapingResult> {
     try {
+      console.log(`[JijiScraper] Starting search for: ${query}`);
       const searchUrl = `${this.baseUrl}/search?query=${encodeURIComponent(query)}`;
+      
+      console.log(`[JijiScraper] Fetching URL: ${searchUrl}`);
       const response = await fetch(searchUrl, {
         headers: {
           'User-Agent': this.userAgent,
@@ -32,35 +38,54 @@ export class JijiScraper extends BaseScraper {
 
       const products: Product[] = [];
       const items = $(this.selectors.productItem);
+      
+      console.log(`[JijiScraper] Found ${items.length} items`);
 
       items.each((_, element) => {
-        const $element = $(element);
-        const title = $element.find(this.selectors.productTitle).text().trim();
-        const priceText = $element.find(this.selectors.productPrice).text().trim();
-        const price = this.extractPrice(priceText);
-        const imageUrl = $element.find(this.selectors.productImage).attr('data-src') || 
-                        $element.find(this.selectors.productImage).attr('src');
-        const productUrl = $element.find(this.selectors.productLink).attr('href');
+        try {
+          const $element = $(element);
+          const title = $element.find(this.selectors.title).text().trim();
+          const priceText = $element.find(this.selectors.price).text().trim();
+          const price = this.cleanPrice(priceText);
+          const imageUrl = $element.find(this.selectors.image).attr('data-src') || 
+                          $element.find(this.selectors.image).attr('src');
+          const productUrl = $element.find(this.selectors.url).attr('href');
 
-        if (title && price && imageUrl && productUrl) {
-          products.push({
-            title,
-            price,
-            currency: this.currency,
-            imageUrl: this.normalizeImageUrl(imageUrl),
-            productUrl: this.normalizeProductUrl(productUrl),
-            store: this.store,
-          });
+          if (title && price && imageUrl && productUrl) {
+            const product: Product = {
+              title,
+              price,
+              currency: this.currency,
+              imageUrl: this.normalizeImageUrl(imageUrl),
+              productUrl: this.normalizeProductUrl(productUrl),
+              store: this.store,
+              rating: 0,
+              reviews: 0,
+              availability: true
+            };
+            console.log(`[JijiScraper] Found product:`, product);
+            products.push(product);
+          } else {
+            console.log(`[JijiScraper] Skipping product due to missing data:`, {
+              title,
+              price,
+              imageUrl,
+              productUrl
+            });
+          }
+        } catch (error) {
+          console.error('[JijiScraper] Error processing item:', error);
         }
       });
 
+      console.log(`[JijiScraper] Successfully scraped ${products.length} products`);
       return {
-        success: true,
+        success: products.length > 0,
         products,
         error: null,
       };
     } catch (error) {
-      console.error('Error scraping Jiji:', error);
+      console.error('[JijiScraper] Error:', error);
       return {
         success: false,
         products: [],
@@ -70,6 +95,7 @@ export class JijiScraper extends BaseScraper {
   }
 
   private normalizeImageUrl(url: string): string {
+    if (!url) return '/placeholder.png';
     if (url.startsWith('//')) {
       return `https:${url}`;
     }
@@ -80,16 +106,18 @@ export class JijiScraper extends BaseScraper {
   }
 
   private normalizeProductUrl(url: string): string {
+    if (!url) return '#';
     if (url.startsWith('/')) {
       return `${this.baseUrl}${url}`;
     }
     return url;
   }
 
-  private extractPrice(priceText: string): number {
-    const match = priceText.match(/[0-9,.]+/);
-    if (!match) return 0;
-    return parseFloat(match[0].replace(/,/g, ''));
+  protected cleanPrice(price: string): number {
+    // Remove currency symbol and any non-numeric characters except decimal point
+    const numericString = price.replace(/[^0-9.]/g, '');
+    const parsedPrice = parseFloat(numericString);
+    return isNaN(parsedPrice) ? 0 : parsedPrice;
   }
 }
 

@@ -10,17 +10,7 @@ import { currencies, formatCurrencyWithSymbol } from '@/lib/currency';
 import { PlusCircle, Trash2, ArrowLeftRight, Search, Loader2 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
-
-interface Product {
-  title: string;
-  description: string;
-  price: number;
-  currency: string;
-  image: string;
-  url: string;
-  store: string;
-  availability: boolean;
-}
+import { Product } from '@/lib/scrapers/types';
 
 const ProductCard = ({ product }: { product: Product }) => {
   return (
@@ -32,7 +22,7 @@ const ProductCard = ({ product }: { product: Product }) => {
     >
       <div className="relative h-48 overflow-hidden bg-gray-100">
         <Image
-          src={product.image || '/placeholder.png'}
+          src={product.imageUrl || '/placeholder.png'}
           alt={product.title}
           fill
           className="object-contain hover:scale-105 transition-transform duration-300"
@@ -48,11 +38,11 @@ const ProductCard = ({ product }: { product: Product }) => {
             </span>
           </div>
           <h3 className="text-lg font-semibold mb-2 line-clamp-2 min-h-[3.5rem]">{product.title}</h3>
-          <p className="text-gray-600 text-sm line-clamp-3 min-h-[4.5rem]">{product.description}</p>
+          <p className="text-gray-600 text-sm line-clamp-3 min-h-[4.5rem]">{product.title}</p>
         </div>
         <div className="mt-4">
           <Link
-            href={product.url}
+            href={product.productUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="block w-full text-center bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700 transition-colors duration-200"
@@ -99,19 +89,9 @@ export function ProductComparison() {
       
       const data = await response.json();
       if (data.products && Array.isArray(data.products)) {
-        const formattedProducts = data.products.map((product: any) => ({
-          title: product.title,
-          description: product.title, // Using title as description for now
-          price: product.price,
-          currency: product.currency || selectedCurrency,
-          image: product.image,
-          url: product.url,
-          store: product.source,
-          availability: true
-        }));
-        setProducts(formattedProducts);
+        setProducts(data.products);
         
-        if (formattedProducts.length === 0) {
+        if (data.products.length === 0) {
           setError('No products found matching your search.');
         }
       } else {

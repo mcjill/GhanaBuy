@@ -18,6 +18,7 @@ export abstract class BaseScraper {
   protected abstract readonly selectors: Selectors;
   protected abstract readonly store: string;
   protected readonly currency: string = 'GHS'; // Default currency for Ghanaian stores
+  protected readonly userAgent: string = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36';
 
   protected abstract cleanPrice(price: string): number;
   
@@ -33,7 +34,7 @@ export abstract class BaseScraper {
       const response = await retry(() => 
         fetch(searchUrl, {
           headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            'User-Agent': this.userAgent
           }
         })
       );
@@ -52,7 +53,7 @@ export abstract class BaseScraper {
 
       if (items.length === 0) {
         console.log(`No products found for query: ${query} on ${this.store}`);
-        return { products: [], error: 'No products found' };
+        return { products: [], error: 'No products found', success: false };
       }
 
       items.each((_, item) => {
@@ -84,12 +85,12 @@ export abstract class BaseScraper {
               title,
               price,
               currency: this.currency,
-              url: url.startsWith('http') ? url : `${this.baseUrl}${url}`,
-              image: image.startsWith('http') ? image : `${this.baseUrl}${image}`,
+              productUrl: url.startsWith('http') ? url : `${this.baseUrl}${url}`,
+              imageUrl: image.startsWith('http') ? image : `${this.baseUrl}${image}`,
               store: this.store,
               rating,
               reviews,
-              timestamp: Date.now()
+              availability: true
             });
           }
         } catch (error) {
@@ -99,19 +100,19 @@ export abstract class BaseScraper {
 
       const validProducts = products.filter(p => p.title && p.price > 0);
       console.log(`Successfully extracted ${validProducts.length} products from ${this.store}`);
-
+      
       return {
+        success: true,
         products: validProducts,
-        source: this.store,
-        timestamp: Date.now()
+        error: validProducts.length === 0 ? 'No valid products found' : undefined
       };
 
     } catch (error) {
       console.error(`Error scraping ${this.store}:`, error);
       return {
+        success: false,
         products: [],
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
-        source: this.store
+        error: error instanceof Error ? error.message : 'An unknown error occurred'
       };
     }
   }
