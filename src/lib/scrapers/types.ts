@@ -3,13 +3,19 @@ export interface Product {
   price: number;
   currency: string;
   url: string;
-  image: string;
-  store: 'CompuGhana' | 'Telefonika' | 'Jumia';
-  availability: boolean;
-  timestamp: Date;
+  image?: string;
+  store: string;
+  availability?: boolean;
+  rating?: number;
+  reviews?: number;
 }
 
 export interface ScrapingResult {
   products: Product[];
   error?: string;
+}
+
+export interface Scraper {
+  scrape: (query: string) => Promise<ScrapingResult>;
+  name: string;
 }

@@ -1,7 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   experimental: {
-    serverActions: true,
+    serverActions: {
+      allowedOrigins: ['localhost:3000']
+    }
   },
   images: {
     domains: [
@@ -20,7 +22,14 @@ const nextConfig = {
       'img.jumia.is',
       'static.jumia.com.gh',
       'telefonika.com.gh',
-      'www.telefonika.com.gh'
+      'www.telefonika.com.gh',
+      'localhost'
+    ],
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '**',
+      },
     ],
   },
   webpack: (config, { isServer }) => {
