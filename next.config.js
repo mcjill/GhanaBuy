@@ -1,46 +1,38 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    serverActions: {
-      allowedOrigins: ['localhost:3000']
-    }
-  },
   images: {
-    domains: [
-      'www.tapback.co',
-      'pictures-ghana.jijistatic.net',
-      'gh.jumia.is',
-      'compughana.com',
-      'telefonika.com',
-      'images-na.ssl-images-amazon.com',
-      'www.compughana.com',
-      'm.media-amazon.com',
-      'media.compughana.com',
-      'cdn.telefonika.com',
-      'www.jumia.com.gh',
-      'jumia.com.gh',
-      'img.jumia.is',
-      'static.jumia.com.gh',
-      'telefonika.com.gh',
-      'www.telefonika.com.gh',
-      'localhost'
-    ],
     remotePatterns: [
       {
         protocol: 'https',
         hostname: '**',
-      },
+      }
     ],
+    domains: [
+      'jumia.is',
+      'jumia.com.gh',
+      'compughana.com',
+      'telefonika.com',
+      'gh.jumia.is',
+      'cdn.pixabay.com',
+      'images.unsplash.com',
+      'lh3.googleusercontent.com'
+    ]
   },
-  webpack: (config, { isServer }) => {
-    if (!isServer) {
-      config.resolve.fallback = {
-        ...config.resolve.fallback,
-        fs: false,
-      };
+  webpack: (config) => {
+    config.module.rules.push({
+      test: /\.svg$/,
+      use: ['@svgr/webpack'],
+    });
+    config.resolve.fallback = {
+      ...config.resolve.fallback,
+      net: false,
+      dns: false,
+      tls: false,
+      fs: false,
+      path: false
     }
-    return config;
-  },
+    return config
+  }
 }
 
 module.exports = nextConfig

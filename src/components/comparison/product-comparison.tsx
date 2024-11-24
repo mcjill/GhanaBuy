@@ -125,13 +125,51 @@ export function ProductComparison() {
     }
   };
 
-  const handleCurrencyChange = (newCurrency: string) => {
+  const handleCurrencyChange = async (newCurrency: string) => {
     setSelectedCurrency(newCurrency);
+    // Convert prices for all products to the new currency
+    const updatedProducts = await Promise.all(products.map(async (product) => {
+      if (product.currency === newCurrency) return product;
+      try {
+        const convertedPrice = await convertPrice(product.price, product.currency, newCurrency);
+        return {
+          ...product,
+          price: convertedPrice,
+          currency: newCurrency
+        };
+      } catch (error) {
+        console.error('Error converting price:', error);
+        return product;
+      }
+    }));
+    setProducts(updatedProducts);
   };
 
-  const convertPrice = (price: number, fromCurrency: string, toCurrency: string) => {
-    // For now, return the original price. We'll implement conversion later
-    return price;
+  const convertPrice = async (price: number, fromCurrency: string, toCurrency: string): Promise<number> => {
+    if (fromCurrency === toCurrency) return price;
+    try {
+      const response = await fetch('/api/convert-currency', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          amount: price,
+          from: fromCurrency,
+          to: toCurrency
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to convert currency');
+      }
+
+      const data = await response.json();
+      return data.convertedAmount;
+    } catch (error) {
+      console.error('Error converting currency:', error);
+      return price; // Return original price if conversion fails
+    }
   };
 
   return (

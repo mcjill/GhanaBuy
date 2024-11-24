@@ -1,166 +1,118 @@
-import puppeteer, { Browser, Page } from 'puppeteer';
 import { Product, ScrapingResult } from './types';
-import { retry } from '../utils/retry';
-import { productCache } from '../cache';
+import * as cheerio from 'cheerio';
+import { retry } from '@/lib/utils/retry';
+
+export interface Selectors {
+  productGrid: string;
+  productItem: string;
+  title: string;
+  price: string;
+  url: string;
+  image: string;
+  rating?: string;
+  reviews?: string;
+}
 
 export abstract class BaseScraper {
-  protected abstract store: 'CompuGhana' | 'Telefonika' | 'Jumia';
-  protected abstract selectors: {
-    productGrid: string;
-    productItem: string;
-    title: string;
-    price: string;
-    image: string;
-    link?: string;
-  };
+  protected abstract readonly baseUrl: string;
+  protected abstract readonly selectors: Selectors;
+  protected abstract readonly store: string;
+  protected readonly currency: string = 'GHS'; // Default currency for Ghanaian stores
 
-  protected async initializePage(browser: Browser): Promise<Page> {
-    const page = await browser.newPage();
-    
-    // Set viewport for consistent results
-    await page.setViewport({ width: 1280, height: 800 });
-
-    // Add error handling for navigation timeouts
-    page.setDefaultNavigationTimeout(30000);
-
-    // Add request interception to block unnecessary resources
-    await page.setRequestInterception(true);
-    page.on('request', (req) => {
-      const resourceType = req.resourceType();
-      if (resourceType === 'image' || resourceType === 'stylesheet' || resourceType === 'font') {
-        req.abort();
-      } else {
-        req.continue();
-      }
-    });
-
-    return page;
+  protected abstract cleanPrice(price: string): number;
+  
+  protected getSearchUrl(query: string): string {
+    return `${this.baseUrl}/search?q=${encodeURIComponent(query)}`;
   }
 
-  protected abstract getSearchUrl(query: string): string;
-
-  protected async extractProducts(page: Page): Promise<Product[]> {
+  async scrape(query: string): Promise<ScrapingResult> {
     try {
-      // Wait for the product grid with a longer timeout
-      await page.waitForSelector(this.selectors.productGrid, { timeout: 10000 });
-
-      return await page.evaluate((selectors) => {
-        const items = document.querySelectorAll(selectors.productItem);
-        console.log('Found items:', items.length);
-        
-        return Array.from(items).map((item) => {
-          try {
-            const titleElement = item.querySelector(selectors.title);
-            const priceElement = item.querySelector(selectors.price);
-            const imageElement = item.querySelector(selectors.image);
-            const linkElement = selectors.link ? item.querySelector(selectors.link) : null;
-            
-            // Extract price value and clean it
-            const priceText = priceElement?.textContent?.trim() || '';
-            const priceValue = parseFloat(priceText.replace(/[^0-9.]/g, ''));
-
-            const product = {
-              title: titleElement?.textContent?.trim() || '',
-              price: priceValue || 0,
-              currency: 'GHS',
-              url: (linkElement?.getAttribute('href') || titleElement?.getAttribute('href')) || '',
-              image: imageElement?.getAttribute('src') || imageElement?.getAttribute('data-src') || '',
-              store: selectors.store,
-              availability: !item.querySelector('.out-of-stock'),
-              timestamp: new Date(),
-            };
-
-            console.log('Extracted product:', product);
-            return product;
-          } catch (error) {
-            console.error('Error extracting product:', error);
-            return null;
-          }
-        }).filter(Boolean);
-      }, { ...this.selectors, store: this.store });
-    } catch (error) {
-      console.error(`Error in extractProducts for ${this.store}:`, error);
-      return [];
-    }
-  }
-
-  public async scrape(searchQuery: string): Promise<ScrapingResult> {
-    // Check cache first
-    const cachedResults = productCache.get(searchQuery, this.store);
-    if (cachedResults) {
-      console.log(`Using cached results for ${this.store}`);
-      return { products: cachedResults };
-    }
-
-    let browser: Browser | null = null;
-
-    try {
-      console.log(`Starting scrape for ${this.store}`);
+      const searchUrl = this.getSearchUrl(query);
+      console.log(`Scraping ${this.store} with URL: ${searchUrl}`);
       
-      browser = await retry(
-        () => puppeteer.launch({
-          headless: 'new',
-          args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-accelerated-2d-canvas',
-            '--disable-gpu',
-            '--window-size=1280,800'
-          ]
-        }),
-        {
-          maxAttempts: 3,
-          delayMs: 1000,
-          shouldRetry: (error) => {
-            console.error(`Browser launch error for ${this.store}:`, error);
-            return true;
-          },
-        }
+      const response = await retry(() => 
+        fetch(searchUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+          }
+        })
       );
 
-      const page = await this.initializePage(browser);
-
-      // Navigate to search page with retry
-      await retry(
-        () => page.goto(this.getSearchUrl(searchQuery), {
-          waitUntil: 'networkidle0',
-          timeout: 30000
-        }),
-        {
-          maxAttempts: 3,
-          delayMs: 2000,
-          shouldRetry: (error) => {
-            const message = error instanceof Error ? error.message : String(error);
-            return message.includes('timeout') || message.includes('net::');
-          },
-        }
-      );
-
-      console.log(`Navigation complete for ${this.store}`);
-
-      const products = await this.extractProducts(page);
-      const validProducts = products.filter(p => p && p.title && p.price > 0);
-
-      console.log(`Found ${validProducts.length} valid products for ${this.store}`);
-
-      // Cache the results
-      if (validProducts.length > 0) {
-        productCache.set(searchQuery, this.store, validProducts);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch from ${this.store}: ${response.statusText}`);
       }
 
-      return { products: validProducts };
+      const html = await response.text();
+      const $ = cheerio.load(html);
+
+      const products: Product[] = [];
+      const items = $(this.selectors.productItem);
+
+      console.log(`Found ${items.length} items on ${this.store}`);
+
+      if (items.length === 0) {
+        console.log(`No products found for query: ${query} on ${this.store}`);
+        return { products: [], error: 'No products found' };
+      }
+
+      items.each((_, item) => {
+        try {
+          const $item = $(item);
+          const title = $item.find(this.selectors.title).text().trim();
+          const priceText = $item.find(this.selectors.price).text().trim();
+          const url = $item.find(this.selectors.url).attr('href') || '';
+          const image = $item.find(this.selectors.image).attr('src') || $item.find(this.selectors.image).attr('data-src') || '';
+          
+          let rating = 0;
+          let reviews = 0;
+
+          if (this.selectors.rating) {
+            const ratingEl = $item.find(this.selectors.rating);
+            rating = parseFloat(ratingEl.attr('data-rating') || ratingEl.text().trim() || '0');
+          }
+
+          if (this.selectors.reviews) {
+            const reviewsEl = $item.find(this.selectors.reviews);
+            reviews = parseInt(reviewsEl.text().replace(/[^0-9]/g, '') || '0');
+          }
+
+          const price = this.cleanPrice(priceText);
+          console.log(`Extracted product from ${this.store}:`, { title, price, url });
+
+          if (title && price > 0) {
+            products.push({
+              title,
+              price,
+              currency: this.currency,
+              url: url.startsWith('http') ? url : `${this.baseUrl}${url}`,
+              image: image.startsWith('http') ? image : `${this.baseUrl}${image}`,
+              store: this.store,
+              rating,
+              reviews,
+              timestamp: Date.now()
+            });
+          }
+        } catch (error) {
+          console.error(`Error extracting product from ${this.store}:`, error);
+        }
+      });
+
+      const validProducts = products.filter(p => p.title && p.price > 0);
+      console.log(`Successfully extracted ${validProducts.length} products from ${this.store}`);
+
+      return {
+        products: validProducts,
+        source: this.store,
+        timestamp: Date.now()
+      };
 
     } catch (error) {
       console.error(`Error scraping ${this.store}:`, error);
       return {
         products: [],
         error: error instanceof Error ? error.message : 'Unknown error occurred',
+        source: this.store
       };
-    } finally {
-      if (browser) {
-        await browser.close().catch(console.error);
-      }
     }
   }
 }

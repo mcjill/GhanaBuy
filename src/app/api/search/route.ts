@@ -1,27 +1,20 @@
 import { NextResponse } from 'next/server';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
-
-interface Product {
-  title: string;
-  description: string;
-  price: number;
-  currency: string;
-  image: string;
-  url: string;
-  source: string;
-}
+import { Product } from '@/lib/scrapers/types';
+import { scrapeAllSources } from '@/utils/scrapers';
 
 interface SearchRequest {
   query: string;
-  budget: number;
+  budget?: number;
+  currency?: string;
 }
 
 // Helper function to clean price strings
-const cleanPrice = (price: string): number => {
-  const numericPrice = price.replace(/[^0-9.]/g, '');
-  return parseFloat(numericPrice) || 0;
-};
+function cleanPrice(price: string): number {
+  const numericString = price.replace(/[^0-9.]/g, '');
+  return parseFloat(numericString) || 0;
+}
 
 // Scrape Jiji
 async function scrapeJiji(query: string): Promise<Product[]> {
@@ -46,12 +39,14 @@ async function scrapeJiji(query: string): Promise<Product[]> {
         if (title && price) {
           products.push({
             title,
-            description: title,
             price,
             currency: 'GHS',
             image,
             url,
-            source: 'Jiji Ghana'
+            store: 'Jiji Ghana',
+            rating: undefined,
+            reviews: undefined,
+            availability: true
           });
         }
       } catch (error) {
@@ -82,26 +77,8 @@ async function scrapeCompuGhana(query: string): Promise<Product[]> {
     $('.product-item-info').each((_, element) => {
       try {
         const title = $(element).find('.product-item-link').text().trim();
-        let description = '';
-        
-        // If no description is found, try to get specifications
-        const specs = [];
-        $(element).find('.product-item-specs li').each((_, spec) => {
-          specs.push($(spec).text().trim());
-        });
-        
-        // Try to get short description
-        const shortDesc = $(element).find('.product-item-description').text().trim();
-        if (shortDesc) {
-          specs.unshift(shortDesc);
-        }
-        
-        description = specs.join(' • ') || title;
-
         const priceText = $(element).find('.price').first().text().trim();
         const price = cleanPrice(priceText);
-        
-        // Try multiple ways to get the image URL
         let image = '';
         const imgElement = $(element).find('img.product-image-photo');
         image = imgElement.attr('src') || 
@@ -120,12 +97,14 @@ async function scrapeCompuGhana(query: string): Promise<Product[]> {
         if (title && price) {
           products.push({
             title,
-            description: description || `${title} - Available at CompuGhana`,
             price,
             currency: 'GHS',
             image,
             url,
-            source: 'CompuGhana'
+            store: 'CompuGhana',
+            rating: undefined,
+            reviews: undefined,
+            availability: true
           });
         }
       } catch (err) {
@@ -177,12 +156,14 @@ async function scrapeTelefonika(query: string): Promise<Product[]> {
         if (title && price) {
           products.push({
             title,
-            description: `${title} - Available at Telefonika`,
             price,
             currency: 'GHS',
             image: image.startsWith('http') ? image : `https://telefonika.com${image}`,
             url: url.startsWith('http') ? url : `https://telefonika.com${url}`,
-            source: 'Telefonika'
+            store: 'Telefonika',
+            rating: undefined,
+            reviews: undefined,
+            availability: true
           });
         }
       } catch (err) {
@@ -218,30 +199,29 @@ async function scrapeJumia(query: string): Promise<Product[]> {
     const products: Product[] = [];
 
     // Jumia uses article tags with specific classes for products
-    $('article.prd._fb').each((_, element) => {
+    $('.prd._fb.col.c-prd').each((_, element) => {
       try {
         const title = $(element).find('.name').text().trim();
         const priceText = $(element).find('.prc').text().trim();
         const price = cleanPrice(priceText);
-        const image = $(element).find('img.img').data('src') || '';
-        const url = $(element).find('a.core').attr('href') || '';
-
-        // Get rating and reviews if available
-        const rating = $(element).find('.stars._s').text().trim();
+        const url = $(element).find('a').attr('href') || '';
+        const image = $(element).find('img').attr('data-src') || '';
+        const rating = parseFloat($(element).find('.stars._s').text().trim());
         const reviews = $(element).find('.rev').text().trim();
-        const description = rating && reviews ? `Rating: ${rating} • ${reviews} reviews` : '';
 
         console.log('Found Jumia product:', { title, price, image: !!image });
 
         if (title && price) {
           products.push({
             title,
-            description: description || `${title} - Available on Jumia Ghana`,
             price,
             currency: 'GHS',
-            image,
             url: url.startsWith('http') ? url : `https://www.jumia.com.gh${url}`,
-            source: 'Jumia Ghana'
+            image: image || undefined,
+            store: 'Jumia Ghana',
+            rating: !isNaN(rating) ? rating : undefined,
+            reviews: reviews ? parseInt(reviews) : undefined,
+            availability: true
           });
         }
       } catch (err) {
@@ -284,12 +264,14 @@ async function scrapeAmazon(query: string): Promise<Product[]> {
       if (title && price) {
         products.push({
           title,
-          description: 'No description available',
           price: price * 12.5, // Convert USD to GHS (approximate)
           currency: 'GHS',
           image,
           url,
-          source: 'Amazon'
+          store: 'Amazon',
+          rating: undefined,
+          reviews: undefined,
+          availability: true
         });
       }
     });
@@ -323,12 +305,14 @@ async function scrapeAliExpress(query: string): Promise<Product[]> {
       if (title && price) {
         products.push({
           title,
-          description: 'No description available',
           price,
           currency: 'USD',
           image,
           url: url.startsWith('http') ? url : `https:${url}`,
-          source: 'AliExpress'
+          store: 'AliExpress',
+          rating: undefined,
+          reviews: undefined,
+          availability: true
         });
       }
     });
@@ -342,47 +326,46 @@ async function scrapeAliExpress(query: string): Promise<Product[]> {
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { query, budget = Infinity, currency = 'GHS' } = body;
+    const { query, budget, currency = 'GHS' } = await request.json() as SearchRequest;
 
     if (!query) {
-      return NextResponse.json({ error: 'Search query is required' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Query parameter is required' },
+        { status: 400 }
+      );
     }
 
-    // First try Jiji
-    let products = await scrapeJiji(query);
-    let affordableProducts = products.filter(p => p.price <= budget);
+    console.log(`Searching for products matching: "${query}"`);
+    const results = await scrapeAllSources(query);
 
-    // If no affordable products found on Jiji or this is a comparison request, try Amazon
-    if (affordableProducts.length === 0 || budget === 100000000) {
-      const amazonProducts = await scrapeAmazon(query);
-      products = [...products, ...amazonProducts];
-      affordableProducts = products.filter(p => p.price <= budget);
+    if (results.error) {
+      console.error('Error during scraping:', results.error);
+      return NextResponse.json(
+        { error: results.error },
+        { status: 500 }
+      );
     }
 
-    // Sort all products by price
-    const sortedProducts = products.sort((a, b) => a.price - b.price);
+    let products = results.products;
 
-    if (sortedProducts.length === 0) {
-      return NextResponse.json({
-        products: [],
-        total: 0,
-        message: 'No products found matching your search.'
-      });
+    // Filter by budget if specified
+    if (budget) {
+      products = products.filter(product => product.price <= budget);
     }
+
+    // Sort products by price
+    products.sort((a, b) => a.price - b.price);
 
     return NextResponse.json({
-      products: sortedProducts,
-      total: sortedProducts.length,
-      sources: {
-        jiji: products.filter(p => p.source === 'Jiji Ghana').length,
-        amazon: products.filter(p => p.source === 'Amazon').length
-      }
+      products,
+      totalResults: products.length,
+      currency
     });
+
   } catch (error) {
-    console.error('Search API error:', error);
+    console.error('Error in search API:', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to fetch search results' },
+      { error: 'Failed to search products' },
       { status: 500 }
     );
   }
@@ -391,19 +374,22 @@ export async function POST(request: Request) {
 // Add GET method support for flexibility
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const query = searchParams.get('query');
-  const budget = searchParams.get('budget');
-  
-  // Convert the GET request to use the POST handler
-  return POST(new Request(request.url, {
+  const query = searchParams.get('q');
+  const budget = searchParams.get('budget') ? parseFloat(searchParams.get('budget')!) : undefined;
+  const currency = searchParams.get('currency') || 'GHS';
+
+  if (!query) {
+    return NextResponse.json(
+      { error: 'Query parameter "q" is required' },
+      { status: 400 }
+    );
+  }
+
+  // Reuse the POST logic by creating a new request
+  const postRequest = new Request(request.url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      query,
-      budget: budget ? parseFloat(budget) : Infinity,
-      currency: 'GHS'
-    })
-  }));
+    body: JSON.stringify({ query, budget, currency })
+  });
+
+  return POST(postRequest);
 }

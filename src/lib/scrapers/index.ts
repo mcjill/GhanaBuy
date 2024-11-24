@@ -1,7 +1,7 @@
 import { compuGhanaScraper } from './compughana';
 import { telefonikaScraper } from './telefonika';
 import { jumiaScraper } from './jumia';
-import { Product, ScrapingResult } from './types';
+import type { Product, ScrapingResult } from './types';
 import { retry } from '../utils/retry';
 import { productCache } from '../cache';
 
@@ -19,42 +19,28 @@ export async function scrapeAll(searchQuery: string): Promise<Product[]> {
     return cachedResults.sort((a, b) => a.price - b.price);
   }
 
-  try {
-    // Run all scrapers concurrently with retries
-    const results = await Promise.allSettled([
-      retry(() => compuGhanaScraper.scrape(cleanQuery), {
-        maxAttempts: 3,
-        delayMs: 1000,
-      }),
-      retry(() => telefonikaScraper.scrape(cleanQuery), {
-        maxAttempts: 3,
-        delayMs: 1000,
-      }),
-      retry(() => jumiaScraper.scrape(cleanQuery), {
-        maxAttempts: 3,
-        delayMs: 1000,
-      }),
-    ]);
+  // Scrape from all sources in parallel
+  const results = await Promise.allSettled([
+    retry(() => compuGhanaScraper.scrape(cleanQuery)),
+    retry(() => telefonikaScraper.scrape(cleanQuery)),
+    retry(() => jumiaScraper.scrape(cleanQuery))
+  ]);
 
-    // Process results and handle errors
-    const allProducts = results.reduce<Product[]>((acc, result) => {
-      if (result.status === 'fulfilled' && result.value.products) {
-        return [...acc, ...result.value.products];
-      }
-      // Log errors but continue with available results
-      if (result.status === 'rejected') {
-        console.error('Scraping error:', result.reason);
-      }
-      return acc;
-    }, []);
+  const products: Product[] = [];
 
-    // Sort by price
-    return allProducts.sort((a, b) => a.price - b.price);
+  results.forEach((result, index) => {
+    if (result.status === 'fulfilled' && result.value.products.length > 0) {
+      const source = ['CompuGhana', 'Telefonika', 'Jumia'][index];
+      const sourceProducts = result.value.products;
+      
+      // Cache the results
+      productCache.set(cleanQuery, source, sourceProducts);
+      
+      products.push(...sourceProducts);
+    }
+  });
 
-  } catch (error) {
-    console.error('Error in scrapeAll:', error);
-    return [];
-  }
+  return products.sort((a, b) => a.price - b.price);
 }
 
-export { Product, ScrapingResult };
+export type { Product, ScrapingResult };

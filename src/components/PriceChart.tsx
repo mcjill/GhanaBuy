@@ -7,9 +7,10 @@ import {
   Title,
   Tooltip,
   Legend,
+  ChartOptions
 } from 'chart.js';
 import { Bar } from 'react-chartjs-2';
-import { ScrapedResults } from '@/utils/scrapers';
+import type { ScrapingResult } from '@/lib/scrapers/types';
 
 ChartJS.register(
   CategoryScale,
@@ -21,12 +22,12 @@ ChartJS.register(
 );
 
 interface PriceChartProps {
-  searchResults: ScrapedResults;
+  searchResults: ScrapingResult;
   selectedCurrency: string;
 }
 
 export function PriceChart({ searchResults, selectedCurrency }: PriceChartProps) {
-  const options = {
+  const options: ChartOptions<'bar'> = {
     responsive: true,
     plugins: {
       legend: {
@@ -65,20 +66,20 @@ export function PriceChart({ searchResults, selectedCurrency }: PriceChartProps)
   };
 
   const data = {
-    labels: Object.keys(searchResults),
+    labels: searchResults.products.map(p => p.store),
     datasets: [
       {
         label: 'Price',
-        data: Object.values(searchResults).map((product) => product.price),
-        backgroundColor: Object.keys(searchResults).map((store, index) => {
+        data: searchResults.products.map(p => p.price),
+        backgroundColor: searchResults.products.map((product, index) => {
           // Local stores get purple shades, global stores get blue shades
-          const isGlobalStore = ['Amazon', 'eBay', 'AliExpress'].includes(store);
+          const isGlobalStore = ['Amazon', 'eBay', 'AliExpress'].includes(product.store);
           const baseColor = isGlobalStore ? 'rgba(54, 162, 235,' : 'rgba(139, 92, 246,';
           const opacity = 1 - (index * 0.1);
           return `${baseColor} ${opacity})`;
         }),
-        borderColor: Object.keys(searchResults).map((store) =>
-          ['Amazon', 'eBay', 'AliExpress'].includes(store)
+        borderColor: searchResults.products.map(product =>
+          ['Amazon', 'eBay', 'AliExpress'].includes(product.store)
             ? 'rgb(54, 162, 235)'
             : 'rgb(139, 92, 246)'
         ),
