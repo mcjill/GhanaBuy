@@ -26,125 +26,102 @@ export async function GET(request: NextRequest) {
 
     console.log('[Jiji API] Fetching URL:', searchUrl);
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+    const response = await fetch(searchUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+      },
+      cache: 'no-store'
+    });
 
-    try {
-      const response = await fetch(searchUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.9',
-          'Accept-Encoding': 'gzip, deflate, br',
-          'Connection': 'keep-alive',
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        },
-        signal: controller.signal,
-        cache: 'no-store',
-        next: { revalidate: 0 }
+    if (!response.ok) {
+      console.error('[Jiji API] Fetch failed:', {
+        status: response.status,
+        statusText: response.statusText,
+        url: searchUrl
       });
+      return NextResponse.json({ 
+        success: false, 
+        error: `Failed to fetch from Jiji: ${response.statusText}` 
+      }, { status: response.status });
+    }
 
-      clearTimeout(timeout);
+    const html = await response.text();
+    
+    if (!html || html.length === 0) {
+      console.error('[Jiji API] Empty response received');
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Empty response from Jiji' 
+      }, { status: 500 });
+    }
 
-      if (!response.ok) {
-        console.error('[Jiji API] Fetch failed:', {
-          status: response.status,
-          statusText: response.statusText,
-          url: searchUrl
-        });
-        return NextResponse.json({ 
-          success: false, 
-          error: `Failed to fetch from Jiji: ${response.statusText}` 
-        }, { status: response.status });
-      }
+    if (html.includes('Access to this page has been denied')) {
+      console.error('[Jiji API] Access denied by Jiji');
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Access denied by Jiji. Please try again later.' 
+      }, { status: 403 });
+    }
 
-      const html = await response.text();
-      
-      if (!html || html.length === 0) {
-        console.error('[Jiji API] Empty response received');
-        return NextResponse.json({ 
-          success: false, 
-          error: 'Empty response from Jiji' 
-        }, { status: 500 });
-      }
+    const $ = cheerio.load(html);
+    const products: Product[] = [];
+    const items = $('.qa-advert-list-item');
 
-      if (html.includes('Access to this page has been denied')) {
-        console.error('[Jiji API] Access denied by Jiji');
-        return NextResponse.json({ 
-          success: false, 
-          error: 'Access denied by Jiji. Please try again later.' 
-        }, { status: 403 });
-      }
+    console.log(`[Jiji API] Found ${items.length} items`);
 
-      const $ = cheerio.load(html);
-      const products: Product[] = [];
-      const items = $('.qa-advert-list-item');
-
-      console.log(`[Jiji API] Found ${items.length} items`);
-
-      if (items.length === 0) {
-        console.log('[Jiji API] No products found. HTML snippet:', html.substring(0, 500));
-        return NextResponse.json({
-          success: true,
-          error: null,
-          products: []
-        });
-      }
-
-      items.each((_, element) => {
-        try {
-          const $element = $(element);
-          const title = $element.find('.qa-advert-title').text().trim();
-          const priceText = $element.find('.qa-advert-price').text().trim();
-          const imageUrl = $element.find('img').attr('data-src') || 
-                          $element.find('img').attr('src');
-          const productUrl = $element.find('a').attr('href');
-
-          // Clean price
-          const numericString = priceText.replace(/[^0-9.]/g, '');
-          const price = parseFloat(numericString);
-
-          if (title && price > 0 && imageUrl && productUrl) {
-            products.push({
-              title,
-              price,
-              currency: 'GHS',
-              imageUrl: imageUrl.startsWith('http') ? imageUrl : 
-                       imageUrl.startsWith('//') ? `https:${imageUrl}` :
-                       `${baseUrl}${imageUrl}`,
-              productUrl: productUrl.startsWith('http') ? productUrl : 
-                         `${baseUrl}${productUrl}`,
-              store: 'Jiji Ghana',
-              rating: 0,
-              reviews: 0,
-              availability: true
-            });
-          }
-        } catch (error) {
-          console.error('[Jiji API] Error processing item:', error);
-        }
-      });
-
-      console.log(`[Jiji API] Successfully extracted ${products.length} products`);
+    if (items.length === 0) {
+      console.log('[Jiji API] No products found. HTML snippet:', html.substring(0, 500));
       return NextResponse.json({
         success: true,
-        products,
-        error: null
+        error: null,
+        products: []
       });
-
-    } catch (fetchError) {
-      clearTimeout(timeout);
-      if (fetchError.name === 'AbortError') {
-        console.error('[Jiji API] Request timed out');
-        return NextResponse.json({ 
-          success: false, 
-          error: 'Request timed out while fetching from Jiji',
-          products: []
-        }, { status: 504 });
-      }
-      throw fetchError; // Re-throw to be caught by outer try-catch
     }
+
+    items.each((_, element) => {
+      try {
+        const $element = $(element);
+        const title = $element.find('.qa-advert-title').text().trim();
+        const priceText = $element.find('.qa-advert-price').text().trim();
+        const imageUrl = $element.find('img').attr('data-src') || 
+                        $element.find('img').attr('src');
+        const productUrl = $element.find('a').attr('href');
+
+        // Clean price
+        const numericString = priceText.replace(/[^0-9.]/g, '');
+        const price = parseFloat(numericString);
+
+        if (title && price > 0 && imageUrl && productUrl) {
+          products.push({
+            title,
+            price,
+            currency: 'GHS',
+            imageUrl: imageUrl.startsWith('http') ? imageUrl : 
+                     imageUrl.startsWith('//') ? `https:${imageUrl}` :
+                     `${baseUrl}${imageUrl}`,
+            productUrl: productUrl.startsWith('http') ? productUrl : 
+                       `${baseUrl}${productUrl}`,
+            store: 'Jiji Ghana',
+            rating: 0,
+            reviews: 0,
+            availability: true
+          });
+        }
+      } catch (error) {
+        console.error('[Jiji API] Error processing item:', error);
+      }
+    });
+
+    console.log(`[Jiji API] Successfully extracted ${products.length} products`);
+    return NextResponse.json({
+      success: true,
+      products,
+      error: null
+    });
 
   } catch (error) {
     console.error('[Jiji API] Unexpected error:', error);
