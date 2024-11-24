@@ -17,25 +17,58 @@ export class JijiScraper extends BaseScraper {
     reviews: undefined
   };
 
+  protected getSearchUrl(query: string): string {
+    return `${this.baseUrl}/search?query=${encodeURIComponent(query)}`;
+  }
+
+  protected getHeaders(): HeadersInit {
+    return {
+      ...super.getHeaders(),
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+      'Accept-Language': 'en-GB,en-US;q=0.9,en;q=0.8',
+      'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+      'Sec-Ch-Ua-Mobile': '?0',
+      'Sec-Ch-Ua-Platform': '"macOS"',
+      'Sec-Fetch-Dest': 'document',
+      'Sec-Fetch-Mode': 'navigate',
+      'Sec-Fetch-Site': 'same-origin',
+      'Sec-Fetch-User': '?1',
+      'Upgrade-Insecure-Requests': '1',
+      'Referer': 'https://jiji.com.gh/',
+      'Cookie': 'locale=en'
+    };
+  }
+
   async search(query: string): Promise<ScrapingResult> {
     try {
       console.log(`[JijiScraper] Starting search for: ${query}`);
-      const searchUrl = `${this.baseUrl}/search?query=${encodeURIComponent(query)}`;
+      const searchUrl = this.getSearchUrl(query);
       
       console.log(`[JijiScraper] Fetching URL: ${searchUrl}`);
       const response = await fetch(searchUrl, {
-        headers: {
-          'User-Agent': this.userAgent,
-        },
+        headers: this.getHeaders(),
+        cache: 'no-store',
+        next: { revalidate: 0 }
       });
 
       if (!response.ok) {
+        console.error('[JijiScraper] Failed to fetch:', {
+          status: response.status,
+          statusText: response.statusText,
+          url: searchUrl
+        });
         throw new Error(`Failed to fetch from Jiji: ${response.statusText}`);
       }
 
       const html = await response.text();
-      const $ = cheerio.load(html);
+      console.log('[JijiScraper] Successfully fetched HTML');
+      
+      if (html.includes('Access to this page has been denied')) {
+        console.error('[JijiScraper] Access denied by Jiji');
+        throw new Error('Access denied by Jiji. Please try again later.');
+      }
 
+      const $ = cheerio.load(html);
       const products: Product[] = [];
       const items = $(this.selectors.productItem);
       

@@ -17,8 +17,8 @@ export abstract class BaseScraper {
   protected abstract readonly baseUrl: string;
   protected abstract readonly selectors: Selectors;
   protected abstract readonly store: string;
-  protected readonly currency: string = 'GHS'; // Default currency for Ghanaian stores
-  protected readonly userAgent: string = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36';
+  protected readonly currency: string = 'GHS';
+  protected readonly userAgent: string = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
   protected abstract cleanPrice(price: string): number;
   
@@ -26,22 +26,54 @@ export abstract class BaseScraper {
     return `${this.baseUrl}/search?q=${encodeURIComponent(query)}`;
   }
 
+  protected getHeaders(): HeadersInit {
+    return {
+      'User-Agent': this.userAgent,
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+      'Accept-Language': 'en-US,en;q=0.5',
+      'Accept-Encoding': 'gzip, deflate, br',
+      'Connection': 'keep-alive',
+      'Upgrade-Insecure-Requests': '1',
+      'Sec-Fetch-Dest': 'document',
+      'Sec-Fetch-Mode': 'navigate',
+      'Sec-Fetch-Site': 'none',
+      'Sec-Fetch-User': '?1',
+      'Cache-Control': 'max-age=0'
+    };
+  }
+
   async scrape(query: string): Promise<ScrapingResult> {
     try {
       const searchUrl = this.getSearchUrl(query);
       console.log(`Scraping ${this.store} with URL: ${searchUrl}`);
       
-      const response = await retry(() => 
-        fetch(searchUrl, {
-          headers: {
-            'User-Agent': this.userAgent
+      const response = await retry(
+        async () => {
+          const res = await fetch(searchUrl, {
+            headers: this.getHeaders(),
+            cache: 'no-store'
+          });
+          
+          if (!res.ok) {
+            console.error(`Failed to fetch from ${this.store}:`, {
+              status: res.status,
+              statusText: res.statusText,
+              url: searchUrl
+            });
+            throw new Error(`Failed to fetch from ${this.store}: ${res.statusText}`);
           }
-        })
+          
+          return res;
+        },
+        {
+          retries: 3,
+          minTimeout: 1000,
+          maxTimeout: 5000,
+          onRetry: (error, attempt) => {
+            console.log(`Retrying ${this.store} scrape attempt ${attempt} after error:`, error);
+          }
+        }
       );
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch from ${this.store}: ${response.statusText}`);
-      }
 
       const html = await response.text();
       const $ = cheerio.load(html);
@@ -53,6 +85,7 @@ export abstract class BaseScraper {
 
       if (items.length === 0) {
         console.log(`No products found for query: ${query} on ${this.store}`);
+        console.log('HTML response:', html.substring(0, 500)); // Log first 500 chars of response
         return { products: [], error: 'No products found', success: false };
       }
 
@@ -62,7 +95,8 @@ export abstract class BaseScraper {
           const title = $item.find(this.selectors.title).text().trim();
           const priceText = $item.find(this.selectors.price).text().trim();
           const url = $item.find(this.selectors.url).attr('href') || '';
-          const image = $item.find(this.selectors.image).attr('src') || $item.find(this.selectors.image).attr('data-src') || '';
+          const image = $item.find(this.selectors.image).attr('src') || 
+                       $item.find(this.selectors.image).attr('data-src') || '';
           
           let rating = 0;
           let reviews = 0;
@@ -99,20 +133,19 @@ export abstract class BaseScraper {
       });
 
       const validProducts = products.filter(p => p.title && p.price > 0);
-      console.log(`Successfully extracted ${validProducts.length} products from ${this.store}`);
-      
-      return {
-        success: true,
-        products: validProducts,
-        error: validProducts.length === 0 ? 'No valid products found' : undefined
-      };
+      console.log(`Found ${validProducts.length} valid products from ${this.store}`);
 
+      return {
+        success: validProducts.length > 0,
+        products: validProducts,
+        error: null
+      };
     } catch (error) {
       console.error(`Error scraping ${this.store}:`, error);
       return {
         success: false,
         products: [],
-        error: error instanceof Error ? error.message : 'An unknown error occurred'
+        error: error instanceof Error ? error.message : 'Unknown error occurred'
       };
     }
   }
