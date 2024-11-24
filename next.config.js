@@ -15,8 +15,15 @@ const nextConfig = {
       'gh.jumia.is',
       'cdn.pixabay.com',
       'images.unsplash.com',
-      'lh3.googleusercontent.com'
-    ]
+      'lh3.googleusercontent.com',
+      'jiji.com.gh',
+      'pictures-ghana.jiji.ng',
+      'static-gh.jiji.ng'
+    ],
+    unoptimized: true
+  },
+  experimental: {
+    serverActions: true
   },
   webpack: (config) => {
     config.module.rules.push({
