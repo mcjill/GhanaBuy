@@ -66,11 +66,12 @@ export abstract class BaseScraper {
           return res;
         },
         {
-          attempts: 3,
-          delay: 1000,
-          factor: 2,
-          onAttemptFailed: (error, attempt) => {
-            console.log(`Retrying ${this.store} scrape attempt ${attempt} after error:`, error);
+          maxAttempts: 3,
+          delayMs: 1000,
+          backoffFactor: 2,
+          shouldRetry: (error) => {
+            console.log(`Retrying ${this.store} scrape after error:`, error);
+            return true;
           }
         }
       );
