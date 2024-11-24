@@ -1,5 +1,6 @@
 import { BaseScraper, Selectors } from './base-scraper';
 import type { Product, ScrapingResult } from './types';
+import * as cheerio from 'cheerio';
 
 export class JijiScraper extends BaseScraper {
   protected readonly store = 'Jiji Ghana';
