@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as cheerio from 'cheerio';
 import { Product } from '@/lib/scrapers/types';
+import crypto from 'crypto';
 
 // Disable caching
 export const dynamic = 'force-dynamic';
@@ -117,7 +118,11 @@ export async function GET(request: NextRequest) {
         const price = parseFloat(numericString);
 
         if (title && price > 0 && imageUrl && productUrl) {
+          const productId = productUrl.split('/').pop()?.split('.')[0] || 
+                          crypto.randomBytes(16).toString('hex');
+          
           products.push({
+            id: productId,
             title,
             price,
             currency: 'GHS',
