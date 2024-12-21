@@ -1,6 +1,7 @@
 import { Product, ScrapingResult } from './types';
 import * as cheerio from 'cheerio';
-import { retry } from '@/lib/utils/retry';
+import { retry } from '../utils/retry';
+import { v4 as uuidv4 } from 'uuid';
 
 export interface Selectors {
   productGrid: string;
@@ -114,6 +115,7 @@ export abstract class BaseScraper {
 
           if (title && price > 0) {
             products.push({
+              id: uuidv4(),
               title,
               price,
               currency: this.currency,
@@ -121,8 +123,7 @@ export abstract class BaseScraper {
               imageUrl: image.startsWith('http') ? image : `${this.baseUrl}${image}`,
               store: this.store,
               rating,
-              reviews,
-              availability: true
+              reviews
             });
           }
         } catch (error) {

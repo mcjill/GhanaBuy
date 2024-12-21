@@ -1,93 +1,57 @@
-import { NextResponse } from 'next/server';
-import { Product, SearchRequest, ScrapingResult } from '@/lib/scrapers/types';
-import { jijiScraper } from '@/lib/scrapers/jiji';
+import { NextRequest, NextResponse } from 'next/server';
+import { jumiaScraper } from '@/lib/scrapers/jumia';
+import { compuGhanaScraper } from '@/lib/scrapers/compughana';
+import { Product } from '@/lib/scrapers/types';
+import { scrapeWithRehydration } from '@/lib/scrapers/rehydration-scraper';
 
-export async function GET(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const query = searchParams.get('query');
-
-    if (!query) {
-      return NextResponse.json({ error: 'Query parameter is required' }, { status: 400 });
-    }
-
-    console.log(`Searching for: ${query}`);
-
-    const jijiResults = await jijiScraper.search(query);
-
-    if (!jijiResults.success) {
-      console.error('Error from Jiji scraper:', jijiResults.error);
-      return NextResponse.json({ error: 'Failed to fetch results' }, { status: 500 });
-    }
-
-    return NextResponse.json({ products: jijiResults.products });
-  } catch (error) {
-    console.error('Search error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'An error occurred' },
-      { status: 500 }
-    );
-  }
-}
-
-export async function POST(request: Request) {
-  try {
-    const body = await request.json();
-    console.log('Search request body:', body);
-
-    const { query, budget, currency = 'GHS' } = body as SearchRequest;
+    const { query } = await request.json();
 
     if (!query) {
       return NextResponse.json(
-        { error: 'Query parameter is required' },
+        { error: 'Search query is required' },
         { status: 400 }
       );
     }
 
-    console.log(`Searching for: ${query} with budget: ${budget} in ${currency}`);
+    console.log(`[Search API] Searching for: ${query}`);
 
-    const results = await jijiScraper.search(query);
-    console.log('Jiji search results:', results);
+    // Run scrapers in parallel
+    const [jijiProducts, jumiaResults, compuGhanaResults] = await Promise.all([
+      // Use scrapeWithRehydration for Jiji
+      scrapeWithRehydration(`https://jiji.com.gh/search?query=${encodeURIComponent(query)}`),
+      jumiaScraper.scrape({ query }),
+      compuGhanaScraper.scrape({ query }),
+    ]);
 
-    if (!results.success) {
-      console.error('Error from Jiji scraper:', results.error);
-      return NextResponse.json(
-        { error: results.error || 'Failed to fetch results' },
-        { status: 500 }
-      );
-    }
+    // Combine all products
+    let allProducts: Product[] = [
+      ...jijiProducts,
+      ...(jumiaResults.success ? jumiaResults.products : []),
+      ...(compuGhanaResults.success ? compuGhanaResults.products : [])
+    ];
 
-    let products = results.products.map(product => ({
-      ...product,
-      store: product.store || 'Jiji Ghana', // Ensure store is always set
-      currency: product.currency || currency,
-      availability: product.availability ?? true,
-      rating: product.rating ?? 0,
-      reviews: product.reviews ?? 0
-    }));
-
-    // Filter by budget if specified
-    if (budget) {
-      products = products.filter(product => product.price <= budget);
-    }
-
-    // Sort by price (lowest first)
-    products.sort((a, b) => a.price - b.price);
-
-    console.log(`Found ${products.length} products after filtering`);
+    // Log results
+    console.log(`[Search API] Found ${allProducts.length} total products:`);
+    console.log(`- Jiji: ${jijiProducts.length} products`);
+    console.log(`- Jumia: ${jumiaResults.success ? jumiaResults.products.length : 0} products`);
+    console.log(`- CompuGhana: ${compuGhanaResults.success ? compuGhanaResults.products.length : 0} products`);
 
     return NextResponse.json({
       success: true,
-      products,
-      totalResults: products.length,
-      currency,
-      budget
+      products: allProducts,
+      errors: {
+        jiji: jijiProducts.length === 0 ? 'No products found' : null,
+        jumia: jumiaResults.error,
+        compughana: compuGhanaResults.error,
+      }
     });
 
   } catch (error) {
-    console.error('Search error:', error);
+    console.error('[Search API] Error:', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'An error occurred' },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }

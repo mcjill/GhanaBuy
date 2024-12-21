@@ -1,25 +1,25 @@
 export interface Product {
+  id: string;
   title: string;
   price: number;
   currency: string;
-  imageUrl: string;
   productUrl: string;
+  imageUrl: string;
   store: string;
-  rating?: number;
-  reviews?: number;
-  availability?: boolean;
-}
-
-export interface ScrapingResult {
-  success: boolean;
-  products: Product[];
-  error: string | null;
+  rating: number | null;
+  reviews: number | null;
 }
 
 export interface SearchRequest {
   query: string;
   budget?: number;
   currency?: string;
+}
+
+export interface ScrapingResult {
+  success: boolean;
+  products: Product[];
+  error: string | null;
 }
 
 export interface Scraper {

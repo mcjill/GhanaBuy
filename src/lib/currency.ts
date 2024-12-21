@@ -67,30 +67,23 @@ export function formatCurrencyWithSymbol(amount: number, currencyCode: string): 
   return `${symbol}${formattedAmount}`;
 }
 
-export async function convertCurrency(
-  amount: number,
-  fromCurrency: string,
-  toCurrency: string
-): Promise<number> {
+export const convertPrice = async (amount: number, fromCurrency: string, toCurrency: string): Promise<number> => {
+  // Hardcoded conversion rates (you may want to use a real API in production)
+  const rates = {
+    'USD_GHS': 12.5, // 1 USD = 12.5 GHS
+    'GHS_USD': 1 / 12.5 // 1 GHS = 0.08 USD
+  };
+
   if (fromCurrency === toCurrency) return amount;
 
-  try {
-    const response = await fetch(
-      `https://api.exchangerate-api.com/v4/latest/${fromCurrency}`
-    );
-    const data = await response.json();
-    const rate = data.rates[toCurrency];
-
-    if (!rate) {
-      throw new Error(`Exchange rate not found for ${toCurrency}`);
-    }
-
-    return amount * rate;
-  } catch (error) {
-    console.error('Error converting currency:', error);
-    return amount; // Return original amount if conversion fails
+  const rate = rates[`${fromCurrency}_${toCurrency}`];
+  if (!rate) {
+    console.error(`No conversion rate found for ${fromCurrency} to ${toCurrency}`);
+    return amount;
   }
-}
+
+  return amount * rate;
+};
 
 export function calculateAffordability(
   monthlyIncome: number,

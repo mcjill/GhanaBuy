@@ -1,47 +1,44 @@
 import React from 'react';
+import { Card } from '@/components/ui/card';
 
 export default function ChangelogPage() {
-  const changes = [
-    {
-      version: '1.0.0',
-      date: 'February 8, 2024',
-      changes: [
-        'Initial release',
-        'Multi-platform product search (Jiji Ghana, Amazon)',
-        'Real-time currency conversion',
-        'Interactive product comparison',
-        'Responsive design implementation'
-      ]
-    },
-    {
-      version: '0.9.0',
-      date: 'February 1, 2024',
-      changes: [
-        'Beta release',
-        'Added currency conversion system',
-        'Implemented basic search functionality',
-        'Created responsive UI components'
-      ]
-    }
-  ];
-
   return (
-    <div className="container mx-auto px-4 py-16">
-      <h1 className="text-4xl font-bold mb-8">Changelog</h1>
-      <div className="space-y-8">
-        {changes.map((release, index) => (
-          <div key={index} className="bg-white rounded-lg shadow-lg p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-2xl font-semibold">Version {release.version}</h2>
-              <span className="text-gray-600">{release.date}</span>
-            </div>
-            <ul className="list-disc list-inside space-y-2">
-              {release.changes.map((change, changeIndex) => (
-                <li key={changeIndex} className="text-gray-700">{change}</li>
-              ))}
+    <div className="container mx-auto px-4 py-8">
+      <h1 className="text-3xl font-bold mb-8">Changelog</h1>
+
+      {/* Latest Release */}
+      <div className="mb-12">
+        <h2 className="text-2xl font-semibold mb-4">December 21, 2024</h2>
+        <Card className="p-6">
+          <h3 className="text-xl font-semibold mb-4">🚀 Product Search Improvements</h3>
+          <ul className="space-y-3">
+            <li>✨ Added engaging loading animations with fun messages while searching</li>
+            <li>🔄 Improved Jiji product scraping reliability</li>
+            <li>🎯 Centered product comparison tabs for better UI balance</li>
+            <li>🎨 Enhanced product card animations and styling</li>
+            <li>🔍 Simplified search interface with better error handling</li>
+            <li>🛠️ Removed international store tabs (Amazon, eBay, AliExpress) for future improvements</li>
+            <li>📱 Improved mobile responsiveness across all components</li>
+          </ul>
+        </Card>
+      </div>
+
+      {/* Previous Releases */}
+      <div className="space-y-12 opacity-75">
+        <div>
+          <h2 className="text-2xl font-semibold mb-4">December 20, 2024</h2>
+          <Card className="p-6">
+            <h3 className="text-xl font-semibold mb-4">🌟 Initial Release</h3>
+            <ul className="space-y-3">
+              <li>🚀 Launched product comparison tool</li>
+              <li>🔍 Integrated local store scrapers (Jiji, Jumia, CompuGhana)</li>
+              <li>💱 Added currency conversion support</li>
+              <li>🎨 Implemented responsive product grid layout</li>
+              <li>📊 Added product sorting and filtering capabilities</li>
+              <li>🔄 Integrated real-time price updates</li>
             </ul>
-          </div>
-        ))}
+          </Card>
+        </div>
       </div>
     </div>
   );

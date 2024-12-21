@@ -1,74 +1,48 @@
 'use client';
 
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { CurrencySelect } from '@/components/ui/currency-select';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card } from '@/components/ui/card';
-import { currencies, formatCurrencyWithSymbol } from '@/lib/currency';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { currencies } from '@/lib/currency';
 import { PlusCircle, Trash2, ArrowLeftRight, Search, Loader2 } from 'lucide-react';
-import Image from 'next/image';
-import Link from 'next/link';
 import { Product } from '@/lib/scrapers/types';
+import { ProductCard } from './product-card';
+import { LoadingAnimation } from '../ui/loading-animation';
 
-const ProductCard = ({ product }: { product: Product }) => {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
-      className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col min-h-[400px]"
-    >
-      <div className="relative h-48 overflow-hidden bg-gray-100">
-        <Image
-          src={product.imageUrl || '/placeholder.png'}
-          alt={product.title}
-          fill
-          className="object-contain hover:scale-105 transition-transform duration-300"
-          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-        />
-      </div>
-      <div className="p-4 flex-grow flex flex-col justify-between">
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-gray-500">{product.store}</span>
-            <span className="text-sm font-semibold text-green-600">
-              {formatCurrencyWithSymbol(product.price, product.currency)}
-            </span>
-          </div>
-          <h3 className="text-lg font-semibold mb-2 line-clamp-2 min-h-[3.5rem]">{product.title}</h3>
-          <p className="text-gray-600 text-sm line-clamp-3 min-h-[4.5rem]">{product.title}</p>
-        </div>
-        <div className="mt-4">
-          <Link
-            href={product.productUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block w-full text-center bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700 transition-colors duration-200"
-          >
-            View Details
-          </Link>
-        </div>
-      </div>
-    </motion.div>
-  );
-};
+interface CurrencySelectProps {
+  value: string;
+  onValueChange: (value: string) => void;
+}
+
+const CurrencySelect = ({ value, onValueChange }: CurrencySelectProps) => (
+  <select
+    value={value}
+    onChange={(e) => onValueChange(e.target.value)}
+    className="w-full h-12 px-4 rounded-xl border-gray-300 focus:ring-2 focus:ring-blue-500"
+  >
+    {currencies.map((currency) => (
+      <option key={currency.code} value={currency.code}>
+        {currency.name} ({currency.symbol})
+      </option>
+    ))}
+  </select>
+);
 
 export function ProductComparison() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [products, setProducts] = useState<Product[]>([]);
+  const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [selectedCurrency, setSelectedCurrency] = useState('GHS');
-  const [error, setError] = useState('');
+  const [error, setError] = useState(null);
+  const [activeStore, setActiveStore] = useState('all');
+  const [currentPage, setCurrentPage] = useState(1);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!searchQuery.trim()) return;
-
+    setError(null);
     setIsLoading(true);
-    setError('');
-    
+
     try {
       const response = await fetch('/api/search', {
         method: 'POST',
@@ -77,29 +51,21 @@ export function ProductComparison() {
         },
         body: JSON.stringify({
           query: searchQuery,
-          budget: 100000000, // High budget to get all products for comparison
-          currency: selectedCurrency
+          store: activeStore
         }),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Failed to fetch products');
-      }
-      
       const data = await response.json();
-      if (data.products && Array.isArray(data.products)) {
-        setProducts(data.products);
-        
-        if (data.products.length === 0) {
-          setError('No products found matching your search.');
-        }
-      } else {
-        setError('No products found');
+
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to fetch products');
       }
-    } catch (error) {
-      console.error('Error searching products:', error);
-      setError(error instanceof Error ? error.message : 'Failed to search products. Please try again.');
+
+      setAllProducts(data.products);
+      setCurrentPage(1);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred while searching');
+      setAllProducts([]);
     } finally {
       setIsLoading(false);
     }
@@ -107,100 +73,187 @@ export function ProductComparison() {
 
   const handleCurrencyChange = async (newCurrency: string) => {
     setSelectedCurrency(newCurrency);
-    // Convert prices for all products to the new currency
-    const updatedProducts = await Promise.all(products.map(async (product) => {
-      if (product.currency === newCurrency) return product;
-      try {
-        const convertedPrice = await convertPrice(product.price, product.currency, newCurrency);
-        return {
-          ...product,
-          price: convertedPrice,
-          currency: newCurrency
-        };
-      } catch (error) {
-        console.error('Error converting price:', error);
-        return product;
-      }
-    }));
-    setProducts(updatedProducts);
-  };
+    if (!allProducts.length) return;
 
-  const convertPrice = async (price: number, fromCurrency: string, toCurrency: string): Promise<number> => {
-    if (fromCurrency === toCurrency) return price;
     try {
-      const response = await fetch('/api/convert-currency', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          amount: price,
-          from: fromCurrency,
-          to: toCurrency
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to convert currency');
-      }
-
-      const data = await response.json();
-      return data.convertedAmount;
+      // Convert all product prices to the new currency
+      const updatedProducts = await Promise.all(
+        allProducts.map(async (product) => {
+          if (product.currency === newCurrency) return product;
+          const convertedPrice = await convertPrice(
+            product.price,
+            product.currency,
+            newCurrency
+          );
+          return {
+            ...product,
+            price: convertedPrice,
+            currency: newCurrency
+          };
+        })
+      );
+      setAllProducts(updatedProducts);
     } catch (error) {
-      console.error('Error converting currency:', error);
-      return price; // Return original price if conversion fails
+      console.error('Error converting prices:', error);
     }
   };
 
+  // Convert prices when currency changes
+  useEffect(() => {
+    if (allProducts.length > 0) {
+      handleCurrencyChange(selectedCurrency);
+    }
+  }, [selectedCurrency]);
+
+  // Filter products based on active store
+  const filteredProducts = useMemo(() => {
+    if (activeStore === 'all') {
+      return allProducts;
+    }
+    return allProducts.filter(product => {
+      const storeName = product.store.toLowerCase();
+      if (activeStore === 'jiji') {
+        return storeName.includes('jiji');
+      }
+      return storeName.includes(activeStore.toLowerCase());
+    });
+  }, [allProducts, activeStore]);
+
+  // Calculate pagination
+  const productsPerPage = 12;
+  const totalPages = Math.ceil(filteredProducts.length / productsPerPage);
+  const startIndex = (currentPage - 1) * productsPerPage;
+  const endIndex = startIndex + productsPerPage;
+  const currentProducts = filteredProducts.slice(startIndex, endIndex);
+
+  // Get store-specific stats
+  const getStoreCount = (storeName: string) => {
+    if (storeName === 'All Stores') return allProducts.length;
+    return allProducts.filter(product => 
+      product.store.toLowerCase().includes(storeName.toLowerCase())
+    ).length;
+  };
+
+  const storeStats = [
+    { name: 'all', displayName: 'All Stores', count: allProducts.length },
+    { name: 'jiji', displayName: 'Jiji Ghana', count: getStoreCount('Jiji') },
+    { name: 'jumia', displayName: 'Jumia', count: getStoreCount('Jumia') },
+    { name: 'compughana', displayName: 'CompuGhana', count: getStoreCount('CompuGhana') },
+  ];
+
   return (
-    <div className="space-y-6 p-4">
-      <form onSubmit={handleSearch} className="max-w-5xl mx-auto flex gap-4 items-center justify-center">
-        <div className="w-[600px]">
+    <div className="p-4 space-y-4">
+      {/* Search Bar */}
+      <div className="flex flex-col items-center justify-center max-w-3xl mx-auto space-y-4">
+        <div className="relative w-full">
           <Input
-            placeholder="Search for products to compare..."
+            type="text"
+            placeholder="Search for products..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="h-12 text-lg rounded-xl border-gray-300 focus:ring-2 focus:ring-blue-500"
+            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+            className="pr-24"
           />
+          <Button
+            onClick={handleSearch}
+            className="absolute right-0 top-0 h-full"
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Search className="w-4 h-4" />
+            )}
+            <span className="ml-2">Search</span>
+          </Button>
         </div>
-        <div className="w-40">
+
+        {/* Currency Selector */}
+        <div className="flex items-center space-x-2">
           <CurrencySelect
             value={selectedCurrency}
-            onValueChange={handleCurrencyChange}
+            onValueChange={setSelectedCurrency}
           />
         </div>
-        <Button 
-          type="submit" 
-          disabled={isLoading}
-          className="h-12 px-6 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium min-w-[120px]"
-        >
-          {isLoading ? (
-            <>
-              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-              Searching...
-            </>
-          ) : (
-            <>
-              <Search className="mr-2 h-5 w-5" />
-              Search
-            </>
-          )}
-        </Button>
-      </form>
-
-      {error && (
-        <div className="text-red-500 text-sm text-center">{error}</div>
-      )}
-
-      <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-        {products.map((product, index) => (
-          <ProductCard key={index} product={product} />
-        ))}
       </div>
 
-      {products.length === 0 && !isLoading && searchQuery && (
+      {/* Loading State */}
+      {isLoading ? (
+        <LoadingAnimation />
+      ) : (
+        <div className="max-w-7xl mx-auto">
+          <Tabs value={activeStore} onValueChange={setActiveStore}>
+            <div className="flex justify-center mb-6">
+              <TabsList className="grid w-full max-w-[600px] grid-cols-4">
+                <TabsTrigger value="all" className="px-8">All</TabsTrigger>
+                <TabsTrigger value="jiji" className="px-8">Jiji</TabsTrigger>
+                <TabsTrigger value="jumia" className="px-8">Jumia</TabsTrigger>
+                <TabsTrigger value="compughana" className="px-8">CompuGhana</TabsTrigger>
+              </TabsList>
+            </div>
+
+            <TabsContent value="all" className="mt-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {currentProducts.map((product) => (
+                  <ProductCard key={product.id} product={product} />
+                ))}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="jiji" className="mt-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {currentProducts.map((product) => (
+                  <ProductCard key={product.id} product={product} />
+                ))}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="jumia" className="mt-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {currentProducts.map((product) => (
+                  <ProductCard key={product.id} product={product} />
+                ))}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="compughana" className="mt-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {currentProducts.map((product) => (
+                  <ProductCard key={product.id} product={product} />
+                ))}
+              </div>
+            </TabsContent>
+          </Tabs>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="mt-8 flex justify-center gap-2">
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                <Button
+                  key={page}
+                  onClick={() => setCurrentPage(page)}
+                  variant={currentPage === page ? "default" : "outline"}
+                  className={`w-10 h-10 p-0 ${
+                    currentPage === page
+                      ? "bg-blue-600 text-white"
+                      : "text-gray-600"
+                  }`}
+                >
+                  {page}
+                </Button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* No Results Message */}
+      {!isLoading && filteredProducts.length === 0 && (
         <div className="text-center py-12">
-          <p className="text-gray-500">No products found. Try a different search term.</p>
+          <h3 className="text-xl font-semibold mb-2">No products found</h3>
+          <p className="text-gray-600">
+            Try adjusting your search terms or selecting a different store.
+          </p>
         </div>
       )}
     </div>
