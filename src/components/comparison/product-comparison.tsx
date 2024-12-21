@@ -71,39 +71,40 @@ export function ProductComparison() {
     }
   };
 
-  const handleCurrencyChange = async (newCurrency: string) => {
-    setSelectedCurrency(newCurrency);
-    if (!allProducts.length) return;
-
-    try {
-      // Convert all product prices to the new currency
-      const updatedProducts = await Promise.all(
-        allProducts.map(async (product) => {
-          if (product.currency === newCurrency) return product;
-          const convertedPrice = await convertPrice(
-            product.price,
-            product.currency,
-            newCurrency
-          );
-          return {
-            ...product,
-            price: convertedPrice,
-            currency: newCurrency
-          };
-        })
-      );
-      setAllProducts(updatedProducts);
-    } catch (error) {
-      console.error('Error converting prices:', error);
-    }
+  // Currency conversion rates (simplified for now)
+  const conversionRates: Record<string, number> = {
+    'GHS_USD': 0.08,  // 1 GHS = 0.08 USD
+    'USD_GHS': 12.5,  // 1 USD = 12.5 GHS
+    'GHS_EUR': 0.073, // 1 GHS = 0.073 EUR
+    'EUR_GHS': 13.7,  // 1 EUR = 13.7 GHS
   };
 
-  // Convert prices when currency changes
-  useEffect(() => {
-    if (allProducts.length > 0) {
-      handleCurrencyChange(selectedCurrency);
+  const convertCurrency = (amount: number, fromCurrency: string, toCurrency: string): number => {
+    if (fromCurrency === toCurrency) return amount;
+    
+    const rateKey = `${fromCurrency}_${toCurrency}`;
+    const rate = conversionRates[rateKey];
+    
+    if (!rate) {
+      console.warn(`No conversion rate found for ${fromCurrency} to ${toCurrency}`);
+      return amount;
     }
-  }, [selectedCurrency]);
+    
+    return amount * rate;
+  };
+
+  // Update products when currency changes
+  useEffect(() => {
+    if (!allProducts.length) return;
+
+    const updatedProducts = allProducts.map(product => ({
+      ...product,
+      price: convertCurrency(product.price, product.currency, selectedCurrency),
+      currency: selectedCurrency
+    }));
+
+    setAllProducts(updatedProducts);
+  }, [selectedCurrency, allProducts]);
 
   // Filter products based on active store
   const filteredProducts = useMemo(() => {
