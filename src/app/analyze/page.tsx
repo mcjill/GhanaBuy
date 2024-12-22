@@ -18,13 +18,15 @@ import {
 } from "@/components/ui/select";
 
 interface Product {
+  id: string;
   title: string;
-  description: string;
   price: number;
   currency: string;
-  image: string;
-  url: string;
-  source: string;
+  productUrl: string;
+  imageUrl: string;
+  store: string;
+  rating: number | null;
+  reviews: number | null;
 }
 
 interface ExchangeRate {
@@ -111,6 +113,29 @@ export default function AnalyzePage() {
     })}`;
   };
 
+  const convertPrice = async (price: number, fromCurrency: string, toCurrency: string): Promise<number> => {
+    if (fromCurrency === toCurrency) return price;
+
+    try {
+      const response = await fetch(`/api/exchange-rates?from=${fromCurrency}&to=${toCurrency}`);
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch exchange rate: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      return price * data.rate;
+    } catch (error) {
+      console.error('Error converting price:', error);
+      return price;
+    }
+  };
+
   const analyzeAffordability = async () => {
     setLoading(true);
     try {
@@ -122,7 +147,7 @@ export default function AnalyzePage() {
       // Calculate disposable income
       const disposableIncome = income - expenses;
       
-      // Search for products
+      // Search for products with budget constraint
       const response = await fetch('/api/search', {
         method: 'POST',
         headers: {
@@ -130,7 +155,8 @@ export default function AnalyzePage() {
         },
         body: JSON.stringify({
           query: productSearch,
-          budget: targetBudget, // Send USD budget to API
+          budget: targetBudget,
+          currency: selectedCurrency?.code || 'USD'
         }),
       });
 
@@ -148,55 +174,69 @@ export default function AnalyzePage() {
         throw new Error('Invalid response format from search API');
       }
 
-      // Convert product prices to USD for comparison
-      const products = data.products.map((product: Product) => ({
-        ...product,
-        price: convertToUSD(product.price)
+      // Convert product prices to selected currency for display
+      const products = await Promise.all(data.products.map(async (product: Product) => {
+        try {
+          const convertedPrice = await convertPrice(
+            product.price,
+            product.currency,
+            selectedCurrency?.code || 'USD'
+          );
+
+          return {
+            ...product,
+            price: convertedPrice,
+            currency: selectedCurrency?.code || 'USD'
+          };
+        } catch (error) {
+          console.error(`Error converting price for product ${product.id}:`, error);
+          return product;
+        }
       }));
 
       if (products.length === 0) {
         setResult({
           type: 'info',
           title: 'No Products Found',
-          summary: 'No products found matching your search.',
-          details: ['Try adjusting your search terms or budget.'],
-          suggestion: 'Consider using more general search terms.'
+          summary: `No products found matching "${productSearch}" within your budget of ${formatAmount(parseFloat(budget))}`,
+          details: [
+            'Try:',
+            '• Using more general search terms',
+            '• Increasing your budget',
+            '• Checking different stores'
+          ],
+          suggestion: 'Consider saving more or exploring alternative products.'
         });
+        setAffordableProducts([]);
+        setAlternativeSuggestions([]);
         setLoading(false);
         return;
       }
 
       // Filter affordable products
-      const affordable = products.filter((product: Product) => product.price <= targetBudget);
-      setAffordableProducts(affordable.map((product: Product) => ({
-        ...product,
-        price: convertFromUSD(product.price) // Convert back to selected currency for display
-      })));
-
-      // Get minimum price for analysis
-      const minJijiPrice = Math.min(...products.map((p: Product) => p.price));
-      const priceDifference = minJijiPrice - targetBudget;
+      const affordable = products.filter((product: Product) => product.price <= parseFloat(budget));
+      setAffordableProducts(affordable);
 
       if (affordable.length === 0) {
         // Show alternative suggestions with lower prices
         const alternatives = products
-          .filter((p: Product) => p.price < minJijiPrice)
+          .sort((a, b) => a.price - b.price)
           .slice(0, 6);
         
-        setAlternativeSuggestions(alternatives.map((product: Product) => ({
-          ...product,
-          price: convertFromUSD(product.price) // Convert back to selected currency for display
-        })));
+        setAlternativeSuggestions(alternatives);
         setShowAlternatives(true);
         
-        // Enhanced analysis message for unaffordable items
+        // Calculate price gap
+        const minPrice = Math.min(...products.map(p => p.price));
+        const priceDifference = minPrice - parseFloat(budget);
+        
         setResult({
           type: 'warning',
           title: 'Price Gap Analysis',
-          summary: `Your budget is ${formatAmount(convertFromUSD(Math.abs(priceDifference)))} below the lowest price found`,
+          summary: `Your budget is ${formatAmount(Math.abs(priceDifference))} below the lowest price found`,
           details: [
             `🎯 Your Budget: ${formatAmount(parseFloat(budget))}`,
-            `💰 Lowest Price Found: ${formatAmount(convertFromUSD(minJijiPrice))}`,
+            `💰 Lowest Price Found: ${formatAmount(minPrice)}`,
             `📊 Monthly Income: ${formatAmount(parseFloat(monthlyIncome))}`,
             `💳 Monthly Expenses: ${formatAmount(parseFloat(monthlyExpenses))}`,
             `💵 Monthly Savings Potential: ${formatAmount(parseFloat(monthlyIncome) - parseFloat(monthlyExpenses))}`
@@ -207,13 +247,12 @@ export default function AnalyzePage() {
         });
       } else {
         setShowAlternatives(false);
-        // Enhanced analysis for affordable items
-        const affordabilityPercentage = (targetBudget / disposableIncome) * 100;
+        const affordabilityPercentage = (parseFloat(budget) / disposableIncome) * 100;
         
         let analysisResult: AnalysisResult = {
           type: 'success',
           title: 'Affordability Analysis',
-          summary: '',
+          summary: `Found ${affordable.length} products matching "${productSearch}" within your budget`,
           details: [
             `🎯 Your Budget: ${formatAmount(parseFloat(budget))}`,
             `📊 Monthly Income: ${formatAmount(parseFloat(monthlyIncome))}`,
@@ -223,24 +262,20 @@ export default function AnalyzePage() {
           suggestion: ''
         };
 
-        if (disposableIncome >= targetBudget) {
+        if (disposableIncome >= parseFloat(budget)) {
           if (affordabilityPercentage <= 30) {
             analysisResult.type = 'success';
-            analysisResult.summary = '✅ This purchase is well within your budget!';
-            analysisResult.suggestion = 'This is a financially sound purchase that aligns well with your budget.';
+            analysisResult.suggestion = 'This purchase is well within your budget. Good choice!';
           } else if (affordabilityPercentage <= 50) {
             analysisResult.type = 'info';
-            analysisResult.summary = '📊 This purchase is affordable but significant.';
-            analysisResult.suggestion = 'While you can afford this, consider if there are any upcoming expenses.';
+            analysisResult.suggestion = 'While affordable, consider any upcoming expenses before making this purchase.';
           } else {
             analysisResult.type = 'warning';
-            analysisResult.summary = '⚠️ This purchase is at the upper limit of your budget.';
-            analysisResult.suggestion = 'While technically affordable, this purchase would use a large portion of your disposable income.';
+            analysisResult.suggestion = 'This purchase would use a significant portion of your savings. Consider your priorities carefully.';
           }
         } else {
           analysisResult.type = 'error';
-          analysisResult.summary = '❌ This purchase might strain your monthly budget.';
-          analysisResult.suggestion = 'Consider saving for a few months or exploring more affordable alternatives.';
+          analysisResult.suggestion = 'This purchase might strain your monthly budget. Consider saving for a few months first.';
         }
 
         setResult(analysisResult);
@@ -464,7 +499,7 @@ export default function AnalyzePage() {
                 <Card key={index} className="overflow-hidden group hover:shadow-lg transition-shadow duration-300">
                   <div className="relative h-48">
                     <Image
-                      src={product.image || '/placeholder.png'}
+                      src={product.imageUrl || '/placeholder.png'}
                       alt={product.title}
                       fill
                       className="object-contain group-hover:scale-105 transition-transform duration-300"
@@ -489,18 +524,27 @@ export default function AnalyzePage() {
                           In Budget
                         </span>
                         <span className="text-xs text-gray-500 mt-1">
-                          from {product.source}
+                          from {product.store}
                         </span>
                       </div>
                     </div>
-                    <Link
-                      href={product.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block w-full bg-blue-600 text-white text-center py-2 rounded-md hover:bg-blue-700 transition-colors mt-4"
-                    >
-                      View Details
-                    </Link>
+                    {product.productUrl ? (
+                      <Link
+                        href={product.productUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block w-full bg-blue-600 text-white text-center py-2 rounded-md hover:bg-blue-700 transition-colors mt-4"
+                      >
+                        View Details
+                      </Link>
+                    ) : (
+                      <button
+                        className="block w-full bg-gray-400 text-white text-center py-2 rounded-md cursor-not-allowed mt-4"
+                        disabled
+                      >
+                        Link Unavailable
+                      </button>
+                    )}
                   </div>
                 </Card>
               ))}
@@ -525,7 +569,7 @@ export default function AnalyzePage() {
                 <Card key={index} className="overflow-hidden group hover:shadow-lg transition-shadow duration-300">
                   <div className="relative h-48">
                     <Image
-                      src={product.image || '/placeholder.png'}
+                      src={product.imageUrl || '/placeholder.png'}
                       alt={product.title}
                       fill
                       className="object-contain group-hover:scale-105 transition-transform duration-300"
@@ -550,18 +594,27 @@ export default function AnalyzePage() {
                           Alternative
                         </span>
                         <span className="text-xs text-gray-500 mt-1">
-                          from {product.source}
+                          from {product.store}
                         </span>
                       </div>
                     </div>
-                    <Link
-                      href={product.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block w-full bg-blue-600 text-white text-center py-2 rounded-md hover:bg-blue-700 transition-colors mt-4"
-                    >
-                      View Details
-                    </Link>
+                    {product.productUrl ? (
+                      <Link
+                        href={product.productUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block w-full bg-blue-600 text-white text-center py-2 rounded-md hover:bg-blue-700 transition-colors mt-4"
+                      >
+                        View Details
+                      </Link>
+                    ) : (
+                      <button
+                        className="block w-full bg-gray-400 text-white text-center py-2 rounded-md cursor-not-allowed mt-4"
+                        disabled
+                      >
+                        Link Unavailable
+                      </button>
+                    )}
                   </div>
                 </Card>
               ))}

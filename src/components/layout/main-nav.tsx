@@ -19,6 +19,16 @@ export function MainNav() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  const handleNavigation = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    e.preventDefault();
+    // Clear any search-related state from localStorage
+    localStorage.removeItem('lastSearch');
+    localStorage.removeItem('searchResults');
+    
+    // Use window.location for hard navigation when needed
+    window.location.href = href;
+  };
+
   const routes = [
     {
       href: '/',
@@ -48,7 +58,8 @@ export function MainNav() {
       <div className="container-apple">
         <div className="flex h-12 items-center justify-between">
           <Link 
-            href="/" 
+            href="/"
+            onClick={(e) => handleNavigation(e, '/')}
             className={`text-lg font-semibold transition-colors duration-200 ${
               isScrolled ? 'text-gray-900' : 'text-gray-800'
             }`}
@@ -63,6 +74,7 @@ export function MainNav() {
               <Link
                 key={route.href}
                 href={route.href}
+                onClick={(e) => handleNavigation(e, route.href)}
                 className={`text-sm font-medium transition-colors duration-200 ${
                   isScrolled ? 'text-gray-600 hover:text-gray-900' : 'text-gray-700 hover:text-gray-900'
                 } ${route.active ? 'nav-link-active' : 'nav-link-inactive'}`}

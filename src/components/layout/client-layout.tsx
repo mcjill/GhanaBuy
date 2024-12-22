@@ -1,5 +1,7 @@
 'use client';
 
+import { useRouter, usePathname } from 'next/navigation';
+import Link from 'next/link';
 import { MainNav } from '@/components/layout/main-nav';
 import { useEffect, useState } from 'react';
 
@@ -8,6 +10,8 @@ export function ClientLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const router = useRouter();
+  const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
   const [currentYear, setCurrentYear] = useState('');
 
@@ -15,6 +19,10 @@ export function ClientLayout({
     setMounted(true);
     setCurrentYear(new Date().getFullYear().toString());
   }, []);
+
+  const handleNavigation = (path: string) => {
+    router.push(path);
+  };
 
   if (!mounted) {
     return null;

@@ -48,42 +48,79 @@ export const currencies: Currency[] = [
   { code: 'JPY', name: 'Japanese Yen', symbol: '¥' },
 ];
 
-const API_KEY = process.env.NEXT_PUBLIC_EXCHANGE_RATE_API_KEY;
+const API_KEY = 'e36a81d4ef5a32f6ecbb1b90';
 const BASE_URL = 'https://api.exchangerate-api.com/v4/latest';
 
-export function getCurrencySymbol(code: string): string {
-  const currency = currencies.find((c) => c.code === code);
-  return currency?.symbol || code;
+const CACHE_DURATION = 1000 * 60 * 60; // 1 hour
+let rateCache: { [key: string]: { rate: number; timestamp: number } } = {};
+
+export async function getExchangeRate(fromCurrency: string, toCurrency: string): Promise<number> {
+  if (fromCurrency === toCurrency) return 1;
+
+  const cacheKey = `${fromCurrency}_${toCurrency}`;
+  const cachedRate = rateCache[cacheKey];
+  
+  if (cachedRate && (Date.now() - cachedRate.timestamp) < CACHE_DURATION) {
+    return cachedRate.rate;
+  }
+
+  try {
+    const response = await fetch(
+      `https://v6.exchangerate-api.com/v6/${API_KEY}/pair/${fromCurrency}/${toCurrency}`
+    );
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch exchange rate');
+    }
+
+    const data = await response.json();
+    const rate = data.conversion_rate;
+
+    // Cache the new rate
+    rateCache[cacheKey] = {
+      rate,
+      timestamp: Date.now()
+    };
+
+    return rate;
+  } catch (error) {
+    console.error('Error fetching exchange rate:', error);
+    if (cachedRate) {
+      // Use expired cache as fallback
+      return cachedRate.rate;
+    }
+    throw error;
+  }
+}
+
+export async function convertPrice(amount: number, fromCurrency: string, toCurrency: string): Promise<number> {
+  try {
+    if (fromCurrency === toCurrency) return amount;
+    
+    const rate = await getExchangeRate(fromCurrency, toCurrency);
+    const convertedAmount = amount * rate;
+    
+    // Round to 2 decimal places
+    return Math.round(convertedAmount * 100) / 100;
+  } catch (error) {
+    console.error('Error converting price:', error);
+    return amount; // Return original amount if conversion fails
+  }
 }
 
 export function formatCurrencyWithSymbol(amount: number, currencyCode: string): string {
-  const currency = currencies.find((c) => c.code === currencyCode);
+  const currency = currencies.find(c => c.code === currencyCode);
   const symbol = currency?.symbol || currencyCode;
-  const formattedAmount = new Intl.NumberFormat('en-US', {
+  
+  return `${symbol}${amount.toLocaleString(undefined, {
     minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
-
-  return `${symbol}${formattedAmount}`;
+    maximumFractionDigits: 2
+  })}`;
 }
 
-export const convertPrice = async (amount: number, fromCurrency: string, toCurrency: string): Promise<number> => {
-  // Hardcoded conversion rates (you may want to use a real API in production)
-  const rates = {
-    'USD_GHS': 12.5, // 1 USD = 12.5 GHS
-    'GHS_USD': 1 / 12.5 // 1 GHS = 0.08 USD
-  };
-
-  if (fromCurrency === toCurrency) return amount;
-
-  const rate = rates[`${fromCurrency}_${toCurrency}`];
-  if (!rate) {
-    console.error(`No conversion rate found for ${fromCurrency} to ${toCurrency}`);
-    return amount;
-  }
-
-  return amount * rate;
-};
+export function getCurrencySymbol(code: string): string {
+  return currencies.find(c => c.code === code)?.symbol || code;
+}
 
 export function calculateAffordability(
   monthlyIncome: number,

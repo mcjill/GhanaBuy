@@ -1,10 +1,9 @@
 import { Product, ScrapingResult, SearchRequest } from './types';
-import { v4 as uuidv4 } from 'uuid';
 import * as cheerio from 'cheerio';
 
 export class CompuGhanaScraper {
-  private readonly store = 'CompuGhana' as const;
   private readonly baseUrl = 'https://compughana.com';
+  private readonly store = 'CompuGhana';
   private readonly currency = 'GHS';
 
   private getSearchUrl(query: string): string {
@@ -15,89 +14,96 @@ export class CompuGhanaScraper {
     try {
       const searchUrl = this.getSearchUrl(request.query);
       console.log(`[CompuGhanaScraper] Starting search for: ${request.query}`);
+      console.log(`[CompuGhanaScraper] Search URL: ${searchUrl}`);
       
       const response = await fetch(searchUrl, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.9',
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        console.error(`[CompuGhanaScraper] HTTP error: ${response.status}`);
+        return {
+          success: false,
+          products: [],
+          error: `HTTP error: ${response.status}`
+        };
       }
 
       const html = await response.text();
+      console.log(`[CompuGhanaScraper] Received HTML response length: ${html.length}`);
+      
       const $ = cheerio.load(html);
       const products: Product[] = [];
 
-      // CompuGhana product grid
-      $('.item.product.product-item').each((_, element) => {
-        const productElement = $(element);
-        const link = productElement.find('.product-item-link');
-        const title = link.text().trim();
-        const priceText = productElement.find('.price').text().trim();
-        const price = parseFloat(priceText.replace(/[^0-9.]/g, ''));
-        const productUrl = link.attr('href') || '';
-        
-        // Fix image URL extraction
-        const imageElement = productElement.find('.product-image-photo');
-        let imageUrl = imageElement.attr('src') || imageElement.attr('data-src') || '';
-        
-        // If we got a lazy-loaded URL, clean it up
-        if (imageUrl.includes('/placeholder/')) {
-          imageUrl = imageElement.attr('data-src') || '';
-        }
+      // Debug: Log the HTML structure
+      console.log('[CompuGhanaScraper] Page title:', $('title').text());
+      
+      // Try different selectors
+      const productElements = $('.product-items .product-item');
+      console.log(`[CompuGhanaScraper] Found ${productElements.length} products with .product-items .product-item`);
 
-        // Ensure image URL is absolute
-        if (imageUrl && !imageUrl.startsWith('http')) {
-          imageUrl = `${this.baseUrl}${imageUrl}`;
-        }
+      if (productElements.length === 0) {
+        // Try alternative selector
+        const altProductElements = $('.item.product.product-item');
+        console.log(`[CompuGhanaScraper] Found ${altProductElements.length} products with .item.product.product-item`);
+      }
 
-        // Improved relevance check
-        const searchTerms = request.query.toLowerCase().split(/\s+/);
-        const titleLower = title.toLowerCase();
-        
-        // Check if all search terms are present in the title
-        const allTermsPresent = searchTerms.every(term => {
-          // Special handling for model numbers (e.g., "15" in "iPhone 15")
-          if (/^\d+$/.test(term)) {
-            return titleLower.includes(term) && 
-              (titleLower.includes('iphone') || titleLower.includes('samsung') || titleLower.includes('pixel'));
+      // Process each product
+      productElements.each((_, element) => {
+        try {
+          const productElement = $(element);
+          
+          // Extract product details with detailed logging
+          const titleElement = productElement.find('.product-item-link');
+          const title = titleElement.text().trim();
+          console.log('[CompuGhanaScraper] Found title:', title);
+
+          const priceElement = productElement.find('.price');
+          const priceText = priceElement.first().text().trim();
+          const price = parseFloat(priceText.replace(/[^0-9.]/g, ''));
+          console.log('[CompuGhanaScraper] Found price:', { raw: priceText, parsed: price });
+
+          const productUrl = titleElement.attr('href');
+          console.log('[CompuGhanaScraper] Found URL:', productUrl);
+
+          const imageElement = productElement.find('.product-image-photo');
+          let imageUrl = imageElement.attr('src') || imageElement.attr('data-src') || '';
+          console.log('[CompuGhanaScraper] Found image:', imageUrl);
+
+          if (title && price > 0 && productUrl) {
+            products.push({
+              id: `compughana-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              title,
+              price,
+              currency: this.currency,
+              productUrl,
+              imageUrl,
+              store: this.store,
+              rating: null,
+              reviews: null
+            });
+            console.log('[CompuGhanaScraper] Successfully added product:', title);
           }
-          return titleLower.includes(term);
-        });
-
-        if (title && price > 0 && allTermsPresent) {
-          products.push({
-            id: uuidv4(),
-            title,
-            price,
-            currency: this.currency,
-            productUrl,
-            imageUrl,
-            store: this.store,
-            rating: null,
-            reviews: null
-          });
+        } catch (error) {
+          console.error('[CompuGhanaScraper] Error processing product:', error);
         }
       });
 
-      console.log(`[CompuGhanaScraper] Found ${products.length} products`);
+      console.log(`[CompuGhanaScraper] Successfully scraped ${products.length} products`);
       return {
         success: true,
-        products: products.sort((a, b) => a.price - b.price),
+        products,
         error: null
       };
+
     } catch (error) {
-      console.error('Error scraping CompuGhana:', error);
+      console.error('[CompuGhanaScraper] Error:', error);
       return {
         success: false,
         products: [],
-        error: error instanceof Error ? error.message : 'Unknown error occurred'
+        error: error instanceof Error ? error.message : 'Unknown error'
       };
     }
   }

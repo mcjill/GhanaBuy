@@ -35,8 +35,13 @@ const configs: Record<string, RehydrationConfig> = {
             const imageUrl = card.querySelector(selectors.image)?.getAttribute('src') || '';
             const link = card.querySelector(selectors.link)?.getAttribute('href') || '';
 
+            // Generate ID from link or timestamp
+            const id = link ? 
+              `jiji-${link.split('/').pop()?.split('.')[0]}` : 
+              `jiji-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
             return {
-              id: link.split('/').pop()?.split('.')[0] || '',
+              id,
               title,
               price,
               currency: 'GHS',

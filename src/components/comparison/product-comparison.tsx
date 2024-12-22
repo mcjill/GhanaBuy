@@ -1,68 +1,143 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { currencies } from '@/lib/currency';
-import { PlusCircle, Trash2, ArrowLeftRight, Search, Loader2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
 import { Product } from '@/lib/scrapers/types';
 import { ProductCard } from './product-card';
 import { LoadingAnimation } from '../ui/loading-animation';
-
-interface CurrencySelectProps {
-  value: string;
-  onValueChange: (value: string) => void;
-}
-
-const CurrencySelect = ({ value, onValueChange }: CurrencySelectProps) => (
-  <select
-    value={value}
-    onChange={(e) => onValueChange(e.target.value)}
-    className="w-full h-12 px-4 rounded-xl border-gray-300 focus:ring-2 focus:ring-blue-500"
-  >
-    {currencies.map((currency) => (
-      <option key={currency.code} value={currency.code}>
-        {currency.name} ({currency.symbol})
-      </option>
-    ))}
-  </select>
-);
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { currencies, convertPrice, Currency } from '@/lib/currency';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { PlusCircle, Trash2, ArrowLeftRight, Search, Loader2 } from 'lucide-react';
 
 export function ProductComparison() {
   const [searchQuery, setSearchQuery] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const [convertedProducts, setConvertedProducts] = useState<Product[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [selectedCurrency, setSelectedCurrency] = useState('GHS');
-  const [error, setError] = useState(null);
   const [activeStore, setActiveStore] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setIsLoading(true);
+  // Initialize search query from URL params only on initial load
+  useEffect(() => {
+    const query = searchParams.get('q');
+    if (query && !searchQuery) {
+      setSearchQuery(query);
+      handleSearch(null, query);
+    }
+  }, []);
+
+  // Add this effect to handle currency conversion
+  useEffect(() => {
+    const updatePrices = async () => {
+      if (!allProducts.length) return;
+      
+      try {
+        const updatedProducts = await Promise.all(
+          allProducts.map(async (product) => {
+            if (product.currency === selectedCurrency) {
+              return product;
+            }
+
+            try {
+              const convertedPrice = await convertPrice(
+                product.price,
+                product.currency,
+                selectedCurrency
+              );
+
+              return {
+                ...product,
+                price: convertedPrice,
+                currency: selectedCurrency
+              };
+            } catch (error) {
+              console.error(`Failed to convert price for product ${product.id}:`, error);
+              return product;
+            }
+          })
+        );
+
+        setAllProducts(updatedProducts);
+      } catch (error) {
+        console.error('Error updating prices:', error);
+      }
+    };
+
+    updatePrices();
+  }, [selectedCurrency]);
+
+  // Update the handleSearch function to include currency
+  const handleSearch = async (e: React.FormEvent | null, initialQuery?: string) => {
+    if (e) {
+      e.preventDefault();
+    }
+
+    const query = initialQuery || searchQuery;
+    if (!query.trim()) {
+      setError('Please enter a search query');
+      return;
+    }
 
     try {
+      setError(null);
+      setIsLoading(true);
+      setAllProducts([]); // Clear previous results
+
       const response = await fetch('/api/search', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          query: searchQuery,
-          store: activeStore
+        body: JSON.stringify({ 
+          query,
+          currency: selectedCurrency 
         }),
       });
 
-      const data = await response.json();
-
-      if (!data.success) {
-        throw new Error(data.error || 'Failed to fetch products');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to fetch products');
       }
 
-      setAllProducts(data.products);
-      setCurrentPage(1);
+      const data = await response.json();
+      
+      if (data.success && Array.isArray(data.products)) {
+        // Convert prices if needed
+        const productsWithConvertedPrices = await Promise.all(
+          data.products.map(async (product: Product) => {
+            if (product.currency === selectedCurrency) {
+              return product;
+            }
+
+            try {
+              const convertedPrice = await convertPrice(
+                product.price,
+                product.currency,
+                selectedCurrency
+              );
+
+              return {
+                ...product,
+                price: convertedPrice,
+                currency: selectedCurrency
+              };
+            } catch (error) {
+              console.error(`Failed to convert price for product ${product.id}:`, error);
+              return product;
+            }
+          })
+        );
+
+        setAllProducts(productsWithConvertedPrices);
+      } else {
+        throw new Error('Invalid response format');
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred while searching');
       setAllProducts([]);
@@ -71,94 +146,60 @@ export function ProductComparison() {
     }
   };
 
-  // Currency conversion rates (simplified for now)
-  const conversionRates: Record<string, number> = {
-    'GHS_USD': 0.08,  // 1 GHS = 0.08 USD
-    'USD_GHS': 12.5,  // 1 USD = 12.5 GHS
-    'GHS_EUR': 0.073, // 1 GHS = 0.073 EUR
-    'EUR_GHS': 13.7,  // 1 EUR = 13.7 GHS
+  // Update the currency change handler
+  const handleCurrencyChange = async (value: string) => {
+    setSelectedCurrency(value);
   };
 
-  const convertCurrency = (amount: number, fromCurrency: string, toCurrency: string): number => {
-    if (fromCurrency === toCurrency) return amount;
-    
-    const rateKey = `${fromCurrency}_${toCurrency}`;
-    const rate = conversionRates[rateKey];
-    
-    if (!rate) {
-      console.warn(`No conversion rate found for ${fromCurrency} to ${toCurrency}`);
-      return amount;
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.value;
+    setSearchQuery(newValue);
+    if (newValue === '') {
+      setAllProducts([]);
+      setConvertedProducts([]);
+      setError(null);
+      router.push('/compare');
     }
-    
-    return amount * rate;
   };
-
-  // Update products when currency changes
-  useEffect(() => {
-    if (!allProducts.length) return;
-
-    const updatedProducts = allProducts.map(product => ({
-      ...product,
-      price: convertCurrency(product.price, product.currency, selectedCurrency),
-      currency: selectedCurrency
-    }));
-
-    setAllProducts(updatedProducts);
-  }, [selectedCurrency, allProducts]);
 
   // Filter products based on active store
-  const filteredProducts = useMemo(() => {
+  const filteredProducts = allProducts;
+  const filteredProductsByStore = filteredProducts.filter(product => {
     if (activeStore === 'all') {
-      return allProducts;
+      return true;
     }
-    return allProducts.filter(product => {
-      const storeName = product.store.toLowerCase();
-      if (activeStore === 'jiji') {
-        return storeName.includes('jiji');
-      }
-      return storeName.includes(activeStore.toLowerCase());
-    });
-  }, [allProducts, activeStore]);
+    const storeName = product.store.toLowerCase();
+    if (activeStore === 'jiji') {
+      return storeName.includes('jiji');
+    }
+    return storeName.includes(activeStore.toLowerCase());
+  });
 
   // Calculate pagination
   const productsPerPage = 12;
-  const totalPages = Math.ceil(filteredProducts.length / productsPerPage);
+  const totalPages = Math.ceil(filteredProductsByStore.length / productsPerPage);
   const startIndex = (currentPage - 1) * productsPerPage;
   const endIndex = startIndex + productsPerPage;
-  const currentProducts = filteredProducts.slice(startIndex, endIndex);
-
-  // Get store-specific stats
-  const getStoreCount = (storeName: string) => {
-    if (storeName === 'All Stores') return allProducts.length;
-    return allProducts.filter(product => 
-      product.store.toLowerCase().includes(storeName.toLowerCase())
-    ).length;
-  };
-
-  const storeStats = [
-    { name: 'all', displayName: 'All Stores', count: allProducts.length },
-    { name: 'jiji', displayName: 'Jiji Ghana', count: getStoreCount('Jiji') },
-    { name: 'jumia', displayName: 'Jumia', count: getStoreCount('Jumia') },
-    { name: 'compughana', displayName: 'CompuGhana', count: getStoreCount('CompuGhana') },
-  ];
+  const currentProducts = filteredProductsByStore.slice(startIndex, endIndex);
 
   return (
     <div className="p-4 space-y-4">
       {/* Search Bar */}
       <div className="flex flex-col items-center justify-center max-w-3xl mx-auto space-y-4">
-        <div className="relative w-full">
+        <form onSubmit={handleSearch} className="relative w-full">
           <Input
             type="text"
-            placeholder="Search for products..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+            onChange={handleInputChange}
+            placeholder="Search for products..."
             className="pr-24"
+            autoComplete="off"
           />
           <Button
+            type="submit"
             onClick={handleSearch}
             className="absolute right-0 top-0 h-full"
-            disabled={isLoading}
+            disabled={isLoading || !searchQuery.trim()}
           >
             {isLoading ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -167,14 +208,21 @@ export function ProductComparison() {
             )}
             <span className="ml-2">Search</span>
           </Button>
-        </div>
+        </form>
 
         {/* Currency Selector */}
         <div className="flex items-center space-x-2">
-          <CurrencySelect
+          <select
             value={selectedCurrency}
-            onValueChange={setSelectedCurrency}
-          />
+            onChange={(e) => handleCurrencyChange(e.target.value)}
+            className="border rounded-md px-3 py-2 bg-white"
+          >
+            {currencies.map((currency) => (
+              <option key={currency.code} value={currency.code}>
+                {currency.code} - {currency.symbol}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -249,7 +297,7 @@ export function ProductComparison() {
       )}
 
       {/* No Results Message */}
-      {!isLoading && filteredProducts.length === 0 && (
+      {!isLoading && filteredProductsByStore.length === 0 && (
         <div className="text-center py-12">
           <h3 className="text-xl font-semibold mb-2">No products found</h3>
           <p className="text-gray-600">

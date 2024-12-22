@@ -39,6 +39,41 @@ export default function ChangelogPage() {
             </ul>
           </Card>
         </div>
+        <div className="space-y-8">
+          {/* New Entry - December 22, 2023 */}
+          <div className="border-l-4 border-blue-500 pl-4">
+            <h2 className="text-2xl font-bold mb-4">December 22, 2023</h2>
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-lg font-semibold text-blue-600">Search & Product Display Improvements</h3>
+                <ul className="list-disc ml-6 space-y-2 text-gray-700">
+                  <li>Removed product filtering and sanitization to show all available products from every source</li>
+                  <li>Fixed CompuGhana scraper to properly extract all product details including images and prices</li>
+                  <li>Improved URL handling across all scrapers to ensure proper absolute URLs</li>
+                  <li>Enhanced product ID generation for better tracking and consistency</li>
+                  <li>Added detailed logging to help track product sourcing and processing</li>
+                </ul>
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-blue-600">Scraper Enhancements</h3>
+                <ul className="list-disc ml-6 space-y-2 text-gray-700">
+                  <li>Added better error handling and reporting in all scrapers</li>
+                  <li>Improved HTML parsing and selector handling for CompuGhana products</li>
+                  <li>Enhanced product validation to ensure all required fields are present</li>
+                  <li>Added testing script for individual scraper testing and debugging</li>
+                </ul>
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-blue-600">Performance Updates</h3>
+                <ul className="list-disc ml-6 space-y-2 text-gray-700">
+                  <li>Removed caching layer to ensure fresh results on every search</li>
+                  <li>Optimized parallel scraping to reduce search response time</li>
+                  <li>Improved error reporting in the API response</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

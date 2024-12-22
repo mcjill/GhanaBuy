@@ -1,5 +1,4 @@
 import { Product, ScrapingResult, SearchRequest } from './types';
-import { v4 as uuidv4 } from 'uuid';
 import * as puppeteer from 'puppeteer';
 
 export class JumiaScraper {
@@ -50,13 +49,29 @@ export class JumiaScraper {
             const imageUrl = imageElement?.getAttribute('data-src');
 
             if (title && price > 0) {
+              // Ensure URLs are absolute
+              let finalProductUrl = productUrl;
+              let finalImageUrl = imageUrl;
+
+              if (finalProductUrl && !finalProductUrl.startsWith('http')) {
+                finalProductUrl = `https://jumia.com.gh${finalProductUrl.startsWith('/') ? '' : '/'}${finalProductUrl}`;
+              }
+              if (finalImageUrl && !finalImageUrl.startsWith('http')) {
+                finalImageUrl = `https:${finalImageUrl.startsWith('//') ? '' : '//'}${finalImageUrl}`;
+              }
+
+              // Generate a simple ID from the product URL or a timestamp
+              const productId = finalProductUrl ? 
+                `jumia-${finalProductUrl.split('/').pop()?.split('.')[0]}` : 
+                `jumia-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
               items.push({
-                id: crypto.randomUUID(),
+                id: productId,
                 title,
                 price,
                 currency,
-                productUrl: productUrl || '',
-                imageUrl: imageUrl || '',
+                productUrl: finalProductUrl,
+                imageUrl: finalImageUrl,
                 store: 'Jumia',
                 rating: null,
                 reviews: null

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 
@@ -30,6 +30,7 @@ export default function SearchPage() {
     
     setIsLoading(true);
     setError(null);
+    setSearchResults([]); // Clear previous results
     
     try {
       const response = await fetch('/api/scrape', {
@@ -40,12 +41,16 @@ export default function SearchPage() {
 
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Failed to fetch results');
+      
       setSearchResults(data.results);
       
-      // Update URL with search query
-      const params = new URLSearchParams();
+      // Update URL without triggering a full page reload
+      const params = new URLSearchParams(window.location.search);
       params.set('q', searchQuery);
-      router.push(`/search?${params.toString()}`);
+      router.push(`/search?${params.toString()}`, { 
+        scroll: false,
+        shallow: true // This prevents full page reload
+      });
     } catch (err) {
       setError('An error occurred while searching. Please try again.');
       console.error(err);
@@ -53,6 +58,23 @@ export default function SearchPage() {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    const queryParam = searchParams.get('q');
+    if (queryParam !== searchQuery) {
+      setSearchQuery(queryParam || '');
+      if (queryParam) {
+        handleSearch(new Event('submit') as any);
+      }
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    const queryParam = searchParams.get('q');
+    if (queryParam && queryParam !== searchQuery) {
+      handleSearch(new Event('submit') as any);
+    }
+  }, [searchParams]);
 
   return (
     <main className="min-h-screen bg-gray-50">
