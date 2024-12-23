@@ -10,7 +10,11 @@
     "type-check": "tsc --noEmit",
     "test": "jest",
     "format": "prettier --write .",
-    "prepare-release": "npm run lint && npm run type-check && npm run test && npm run build"
+    "prepare-release": "npm run lint && npm run type-check && npm run test && npm run build",
+    "test-jiji": "ts-node scripts/test-jiji.ts",
+    "test-jumia": "ts-node scripts/test-jumia.ts",
+    "test-compughana": "ts-node scripts/test-compughana.ts",
+    "test-scrapers": "ts-node scripts/test-scrapers.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.7.0",

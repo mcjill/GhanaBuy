@@ -1,7 +1,7 @@
 import { compuGhanaScraper } from './compughana';
 import { telefonikaScraper } from './telefonika';
 import { jumiaScraper } from './jumia';
-import type { Product, ScrapingResult } from './types';
+import type { Product, ScrapingResult, SearchRequest } from './types';
 import { retry } from '../utils/retry';
 import { productCache } from '../cache';
 
@@ -21,9 +21,9 @@ export async function scrapeAll(searchQuery: string): Promise<Product[]> {
 
   // Scrape from all sources in parallel
   const results = await Promise.allSettled([
-    retry(() => compuGhanaScraper.scrape(cleanQuery)),
-    retry(() => telefonikaScraper.scrape(cleanQuery)),
-    retry(() => jumiaScraper.scrape(cleanQuery))
+    retry(() => compuGhanaScraper.scrape({ query: cleanQuery })),
+    retry(() => telefonikaScraper.scrape({ query: cleanQuery })),
+    retry(() => jumiaScraper.scrape({ query: cleanQuery }))
   ]);
 
   const products: Product[] = [];
@@ -43,4 +43,4 @@ export async function scrapeAll(searchQuery: string): Promise<Product[]> {
   return products.sort((a, b) => a.price - b.price);
 }
 
-export type { Product, ScrapingResult };
+export type { Product, ScrapingResult, SearchRequest };

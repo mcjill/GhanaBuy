@@ -233,11 +233,12 @@ export function ProductComparison() {
         <div className="max-w-7xl mx-auto">
           <Tabs value={activeStore} onValueChange={setActiveStore}>
             <div className="flex justify-center mb-6">
-              <TabsList className="grid w-full max-w-[600px] grid-cols-4">
-                <TabsTrigger value="all" className="px-8">All</TabsTrigger>
-                <TabsTrigger value="jiji" className="px-8">Jiji</TabsTrigger>
-                <TabsTrigger value="jumia" className="px-8">Jumia</TabsTrigger>
-                <TabsTrigger value="compughana" className="px-8">CompuGhana</TabsTrigger>
+              <TabsList className="grid w-full max-w-[800px] grid-cols-5">
+                <TabsTrigger value="all" className="px-6">All</TabsTrigger>
+                <TabsTrigger value="jiji" className="px-6">Jiji</TabsTrigger>
+                <TabsTrigger value="jumia" className="px-6">Jumia</TabsTrigger>
+                <TabsTrigger value="compughana" className="px-6">CompuGhana</TabsTrigger>
+                <TabsTrigger value="telefonika" className="px-6">Telefonika</TabsTrigger>
               </TabsList>
             </div>
 
@@ -251,25 +252,41 @@ export function ProductComparison() {
 
             <TabsContent value="jiji" className="mt-4">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {currentProducts.map((product) => (
-                  <ProductCard key={product.id} product={product} />
-                ))}
+                {currentProducts
+                  .filter(product => product.store.toLowerCase() === 'jiji ghana')
+                  .map((product) => (
+                    <ProductCard key={product.id} product={product} />
+                  ))}
               </div>
             </TabsContent>
 
             <TabsContent value="jumia" className="mt-4">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {currentProducts.map((product) => (
-                  <ProductCard key={product.id} product={product} />
-                ))}
+                {currentProducts
+                  .filter(product => product.store.toLowerCase() === 'jumia')
+                  .map((product) => (
+                    <ProductCard key={product.id} product={product} />
+                  ))}
               </div>
             </TabsContent>
 
             <TabsContent value="compughana" className="mt-4">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {currentProducts.map((product) => (
-                  <ProductCard key={product.id} product={product} />
-                ))}
+                {currentProducts
+                  .filter(product => product.store.toLowerCase() === 'compughana')
+                  .map((product) => (
+                    <ProductCard key={product.id} product={product} />
+                  ))}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="telefonika" className="mt-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {currentProducts
+                  .filter(product => product.store.toLowerCase() === 'telefonika')
+                  .map((product) => (
+                    <ProductCard key={product.id} product={product} />
+                  ))}
               </div>
             </TabsContent>
           </Tabs>

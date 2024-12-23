@@ -132,8 +132,9 @@ export async function GET(request: NextRequest) {
             productUrl: productUrl.startsWith('http') ? productUrl : 
                        `${baseUrl}${productUrl}`,
             store: 'Jiji Ghana',
-            rating: 0,
-            reviews: 0
+            rating: null,
+            reviews: null,
+            availability: true
           });
         }
       } catch (error) {

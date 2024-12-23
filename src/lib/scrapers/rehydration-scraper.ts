@@ -1,6 +1,7 @@
-import type { Page, Browser, PuppeteerLaunchOptions } from 'puppeteer';
-import puppeteer from 'puppeteer';
-import type { Product, ScrapingResult } from './types';
+import * as puppeteer from 'puppeteer';
+import { Product, ScrapingResult } from './types';
+
+const USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 interface Selectors {
   productCard: string;
@@ -10,49 +11,55 @@ interface Selectors {
   link: string;
 }
 
+interface RehydrationConfig {
+  selectors: Selectors;
+  dataExtractor: (page: puppeteer.Page) => Promise<Product[]>;
+  searchUrl: (query: string) => string;
+}
+
 const configs: Record<string, RehydrationConfig> = {
   'jiji.com.gh': {
     selectors: {
-      productCard: '.b-list-advert__gallery__item',
-      title: '.b-advert-title-inner',
-      price: '.qa-advert-price',
-      image: 'img[data-nuxt-pic]',
-      link: 'a.b-list-advert-base'
+      productCard: 'article',
+      title: 'h4, h3, .b-list-advert__item-title',
+      price: '[data-price], .b-list-advert__item-price',
+      image: 'img',
+      link: 'a'
     },
-    dataExtractor: async (page: Page) => {
+    dataExtractor: async (page: puppeteer.Page): Promise<Product[]> => {
       try {
-        // Wait for product cards to load
-        await page.waitForSelector('.b-list-advert__gallery__item', { timeout: 30000 });
+        // Wait for any content to load
+        await page.waitForSelector('article', { timeout: 15000 });
 
-        // Extract products data
-        const products = await page.evaluate((selectors: Selectors) => {
-          const cards = document.querySelectorAll(selectors.productCard);
-          return Array.from(cards).map(card => {
-            const titleElem = card.querySelector(selectors.title);
-            const title = titleElem?.textContent?.trim() || '';
-            const priceText = card.querySelector(selectors.price)?.textContent?.trim() || '0';
-            const price = parseFloat(priceText.replace(/[^0-9.]/g, '')) || 0;
-            const imageUrl = card.querySelector(selectors.image)?.getAttribute('src') || '';
-            const link = card.querySelector(selectors.link)?.getAttribute('href') || '';
+        // Extract product data
+        const products = await page.evaluate(() => {
+          const items = document.querySelectorAll('article');
+          return Array.from(items).map((item) => {
+            const titleElement = item.querySelector('h4, h3, .b-list-advert__item-title');
+            const priceElement = item.querySelector('[data-price], .b-list-advert__item-price');
+            const imageElement = item.querySelector('img');
+            const linkElement = item.querySelector('a');
 
-            // Generate ID from link or timestamp
-            const id = link ? 
-              `jiji-${link.split('/').pop()?.split('.')[0]}` : 
-              `jiji-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            const title = titleElement?.textContent?.trim() || '';
+            const priceText = priceElement?.textContent?.trim() || '';
+            const price = parseFloat(priceText.replace(/[^\d.]/g, '')) || 0;
+            const imageUrl = imageElement?.getAttribute('src') || '';
+            const productUrl = linkElement?.getAttribute('href') || '';
 
             return {
-              id,
               title,
               price,
               currency: 'GHS',
-              productUrl: `https://jiji.com.gh${link}`,
               imageUrl,
+              productUrl: productUrl.startsWith('http') ? productUrl : `https://jiji.com.gh${productUrl}`,
               store: 'Jiji Ghana',
+              availability: true,
+              id: `jiji-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
               rating: null,
               reviews: null
             };
           });
-        }, configs['jiji.com.gh'].selectors);
+        });
 
         return products.filter((product: Product) => product.title && product.price > 0);
       } catch (error) {
@@ -64,69 +71,119 @@ const configs: Record<string, RehydrationConfig> = {
   }
 };
 
-interface RehydrationConfig {
-  selectors: Selectors;
-  dataExtractor: (page: Page) => Promise<Product[]>;
-  searchUrl: (query: string) => string;
-}
-
-export async function scrapeWithRehydration(url: string): Promise<Product[]> {
-  let browser: Browser | null = null;
+export const scrapeWithRehydration = async (url: string): Promise<Product[]> => {
+  let browser: puppeteer.Browser | undefined;
   
   try {
-    const options: PuppeteerLaunchOptions = {
-      headless: 'new',
+    browser = await puppeteer.launch({
+      headless: true,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--disable-gpu',
-        '--window-size=1920x1080'
+        '--disable-web-security',
+        '--disable-features=IsolateOrigins,site-per-process'
       ]
-    };
+    });
 
-    browser = await puppeteer.launch(options);
-    const domain = new URL(url).hostname;
-    const config = configs[domain];
-    
-    if (!config) {
-      console.error(`No configuration found for domain: ${domain}`);
-      return [];
-    }
-
-    console.log(`Fetching ${url}...`);
     const page = await browser.newPage();
     
-    // Set user agent
-    await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-    
-    // Set viewport
+    // Set a more realistic user agent and viewport
+    await page.setUserAgent(USER_AGENT);
     await page.setViewport({ width: 1920, height: 1080 });
 
-    // Navigate to the URL with longer timeout
-    await page.goto(url, { 
-      waitUntil: 'networkidle0', 
-      timeout: 60000 
+    // Set request interception to block unnecessary resources
+    await page.setRequestInterception(true);
+    page.on('request', (request) => {
+      const resourceType = request.resourceType();
+      // Only allow necessary resources
+      if (['document', 'xhr', 'fetch', 'script'].includes(resourceType)) {
+        request.continue();
+      } else {
+        request.abort();
+      }
     });
-    
-    // Wait for a bit to ensure dynamic content loads
-    await new Promise(resolve => setTimeout(resolve, 5000));
-    
-    // Extract products
-    const products = await config.dataExtractor(page);
-    console.log(`Extracted ${products.length} products from ${domain}`);
-    
+
+    // Navigate directly to the URL
+    console.log('Navigating to:', url);
+    await page.goto(url, { 
+      waitUntil: 'networkidle0',
+      timeout: 30000 
+    });
+
+    // Wait for the content to load
+    await page.waitForSelector('.qa-advert-list-item, .b-list-advert__gallery__item', {
+      timeout: 15000
+    });
+
+    // Extract product data
+    const products = await page.evaluate(() => {
+      const results: any[] = [];
+      
+      // Find all product items
+      const items = document.querySelectorAll('.qa-advert-list-item, .b-list-advert__gallery__item');
+      
+      items.forEach((item) => {
+        try {
+          // Find title
+          const titleElement = item.querySelector('.qa-advert-title, .b-advert-title-inner, .b-list-advert-base__item-title');
+          if (!titleElement) return;
+          
+          const title = titleElement.textContent?.trim();
+          if (!title) return;
+
+          // Find price
+          const priceElement = item.querySelector('.qa-advert-price, .b-list-advert__price-base');
+          if (!priceElement) return;
+          
+          const priceText = priceElement.textContent?.trim() || '';
+          const price = parseFloat(priceText.replace(/[^\d.]/g, ''));
+          if (!price) return;
+
+          // Find image
+          const imageElement = item.querySelector('img');
+          const imageUrl = imageElement?.getAttribute('src') || '';
+
+          // Find link
+          const linkElement = item.querySelector('a') || titleElement.closest('a');
+          const productUrl = linkElement?.getAttribute('href') || '';
+
+          // Find location
+          const locationElement = item.querySelector('.b-list-advert__region__text');
+          const location = locationElement?.textContent?.trim() || '';
+
+          results.push({
+            title,
+            price,
+            currency: 'GHS',
+            imageUrl,
+            productUrl: productUrl.startsWith('http') ? productUrl : `https://jiji.com.gh${productUrl}`,
+            store: 'Jiji Ghana',
+            availability: true,
+            id: `jiji-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            rating: null,
+            reviews: null,
+            metadata: { location }
+          });
+        } catch (err) {
+          console.error('Error parsing item:', err);
+        }
+      });
+
+      return results;
+    });
+
+    console.log(`Found ${products.length} products`);
     return products;
+
   } catch (error) {
-    console.error(`Error in scrapeWithRehydration:`, error);
+    console.error('Error scraping Jiji:', error);
     return [];
   } finally {
     if (browser) {
       await browser.close();
     }
   }
-}
+};
 
 export async function searchAllStores(query: string): Promise<ScrapingResult> {
   try {

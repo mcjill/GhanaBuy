@@ -8,6 +8,14 @@ export interface Product {
   store: string;
   rating: number | null;
   reviews: number | null;
+  availability: boolean;
+  metadata?: {
+    searchQuery?: string;
+    originalTitle?: string;
+    relevancyScore?: number;
+    location?: string;
+    [key: string]: any;
+  };
 }
 
 export interface SearchRequest {

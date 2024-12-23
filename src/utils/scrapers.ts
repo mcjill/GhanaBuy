@@ -1,14 +1,10 @@
+import type { Product, ScrapingResult } from '../lib/scrapers/types';
 import * as cheerio from 'cheerio';
-import { Product, ScrapingResult } from '@/lib/scrapers/types';
-import { retry } from '@/lib/utils/retry';
+import { retry } from '../lib/utils/retry';
+import { v4 as uuidv4 } from 'uuid';
 
-const STORE_NAMES = {
-  0: 'Jiji Ghana',
-  1: 'Jumia',
-  2: 'CompuGhana',
-  3: 'Telefonika',
-  4: 'Amazon'
-};
+const STORE_NAMES = ['Jiji Ghana', 'CompuGhana', 'Jumia', 'Telefonika', 'Amazon'] as const;
+type StoreName = typeof STORE_NAMES[number];
 
 export async function scrapeAllSources(query: string): Promise<ScrapingResult> {
   try {
@@ -16,8 +12,8 @@ export async function scrapeAllSources(query: string): Promise<ScrapingResult> {
     
     const results = await Promise.allSettled([
       scrapeJiji(query),      // Add Jiji first as it's prioritized
-      scrapeJumia(query),
       scrapeCompuGhana(query),
+      scrapeJumia(query),
       scrapeTelefonika(query),
       scrapeAmazon(query),
     ]);
@@ -63,40 +59,71 @@ export async function scrapeAllSources(query: string): Promise<ScrapingResult> {
   }
 }
 
-async function scrapeJumia(query: string): Promise<ScrapingResult> {
+export async function scrapeJumia(query: string): Promise<ScrapingResult> {
   try {
-    const response = await retry(() => 
-      fetch(`https://www.jumia.com.gh/catalog/?q=${encodeURIComponent(query)}`, {
+    const searchUrl = `https://www.jumia.com.gh/catalog/?q=${encodeURIComponent(query)}`;
+    console.log('Jumia search URL:', searchUrl);
+
+    const response = await retry(() =>
+      fetch(searchUrl, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'Connection': 'keep-alive',
+          'Cache-Control': 'max-age=0',
+          'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+          'Sec-Ch-Ua-Mobile': '?0',
+          'Sec-Ch-Ua-Platform': '"macOS"',
+          'Sec-Fetch-Dest': 'document',
+          'Sec-Fetch-Mode': 'navigate',
+          'Sec-Fetch-Site': 'none',
+          'Sec-Fetch-User': '?1',
+          'Upgrade-Insecure-Requests': '1'
+        },
+        redirect: 'follow'
       })
     );
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch from Jumia: ${response.status}`);
+    }
+
     const html = await response.text();
     const $ = cheerio.load(html);
     const products: Product[] = [];
 
-    $('.prd').each((_, element) => {
-      const title = $(element).find('.name').text().trim();
-      const priceText = $(element).find('.prc').text().trim();
-      const price = parseFloat(priceText.replace(/[^0-9.]/g, ''));
-      const productUrl = 'https://www.jumia.com.gh' + $(element).find('a').attr('href');
-      const imageUrl = $(element).find('img').attr('data-src');
-      const rating = parseFloat($(element).find('.stars').attr('data-rate') || '0');
-      const reviews = parseInt($(element).find('.rev').text().replace(/[^0-9]/g, '') || '0');
+    // Log the HTML for debugging
+    console.log('Jumia HTML:', html.substring(0, 500));
 
-      if (title && price && productUrl && imageUrl) {
-        products.push({
-          title,
-          price,
-          currency: 'GHS',
-          productUrl,
-          imageUrl,
-          store: 'Jumia',
-          rating,
-          reviews,
-          availability: true
-        });
+    $('article.prd').each((_, element) => {
+      try {
+        const title = $(element).find('[data-name]').attr('data-name')?.trim() || '';
+        const priceText = $(element).find('div.prc').text().trim();
+        const price = parseFloat(priceText.replace(/[^0-9.]/g, ''));
+        const productUrl = 'https://www.jumia.com.gh' + ($(element).find('a.core').attr('href') || '');
+        const imageUrl = $(element).find('img.img').data('src') || '';
+
+        console.log('Found Jumia product:', { title, price, productUrl, imageUrl });
+
+        if (title && !isNaN(price) && productUrl && imageUrl) {
+          const product: Product = {
+            id: uuidv4(),
+            title,
+            price,
+            currency: 'GHS',
+            productUrl,
+            imageUrl,
+            store: 'Jumia',
+            rating: null,
+            reviews: null,
+            availability: true
+          };
+          products.push(product);
+        }
+      } catch (error) {
+        console.error('[Jumia Scraper] Error processing product:', error);
       }
     });
 
@@ -106,6 +133,7 @@ async function scrapeJumia(query: string): Promise<ScrapingResult> {
       error: null
     };
   } catch (error) {
+    console.error('[Jumia Scraper] Error:', error);
     return {
       success: false,
       products: [],
@@ -114,44 +142,55 @@ async function scrapeJumia(query: string): Promise<ScrapingResult> {
   }
 }
 
-async function scrapeCompuGhana(query: string): Promise<ScrapingResult> {
+export async function scrapeCompuGhana(query: string): Promise<ScrapingResult> {
   try {
-    const response = await retry(() => 
-      fetch(`https://compughana.com/catalogsearch/result/?q=${encodeURIComponent(query)}`, {
+    const searchUrl = `https://compughana.com/catalogsearch/result/?q=${encodeURIComponent(query)}`;
+    const response = await retry(() =>
+      fetch(searchUrl, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         }
       })
     );
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch from CompuGhana: ${response.status}`);
+    }
+
     const html = await response.text();
     const $ = cheerio.load(html);
     const products: Product[] = [];
 
-    $('.product-item-info').each((_, element) => {
-      const title = $(element).find('.product-item-link').text().trim();
-      const priceText = $(element).find('.price').first().text().trim();
-      const price = parseFloat(priceText.replace(/[^0-9.]/g, ''));
-      const productUrl = $(element).find('.product-item-link').attr('href') || '';
-      let imageUrl = '';
-      const imgElement = $(element).find('img.product-image-photo');
-      imageUrl = imgElement.attr('src') || 
-                imgElement.attr('data-src') || 
-                imgElement.attr('data-original') || 
-                imgElement.attr('data-lazy') || 
-                '';
+    // Log the HTML for debugging
+    console.log('CompuGhana HTML:', html.substring(0, 500));
 
-      if (title && price && productUrl && imageUrl) {
-        products.push({
-          title,
-          price,
-          currency: 'GHS',
-          productUrl,
-          imageUrl,
-          store: 'CompuGhana',
-          rating: 0,
-          reviews: 0,
-          availability: true
-        });
+    $('.product-item-info').each((_, element) => {
+      try {
+        const title = $(element).find('.product-item-name').text().trim();
+        const priceText = $(element).find('.price').first().text().trim();
+        const price = parseFloat(priceText.replace(/[^0-9.]/g, ''));
+        const productUrl = $(element).find('.product-item-name a').attr('href') || '';
+        const imageUrl = $(element).find('.product-image-photo').attr('src') || '';
+
+        console.log('Found product:', { title, price, productUrl, imageUrl });
+
+        if (title && !isNaN(price) && productUrl && imageUrl) {
+          const product: Product = {
+            id: uuidv4(),
+            title,
+            price,
+            currency: 'GHS',
+            productUrl,
+            imageUrl,
+            store: 'CompuGhana',
+            rating: null,
+            reviews: null,
+            availability: true
+          };
+          products.push(product);
+        }
+      } catch (error) {
+        console.error('[CompuGhana Scraper] Error processing product:', error);
       }
     });
 
@@ -161,6 +200,7 @@ async function scrapeCompuGhana(query: string): Promise<ScrapingResult> {
       error: null
     };
   } catch (error) {
+    console.error('[CompuGhana Scraper] Error:', error);
     return {
       success: false,
       products: [],
@@ -169,38 +209,71 @@ async function scrapeCompuGhana(query: string): Promise<ScrapingResult> {
   }
 }
 
-async function scrapeTelefonika(query: string): Promise<ScrapingResult> {
+export async function scrapeTelefonika(query: string): Promise<ScrapingResult> {
   try {
-    const response = await retry(() => 
-      fetch(`https://telefonika.com.gh/search?q=${encodeURIComponent(query)}`, {
+    const searchUrl = `https://telefonika.com/?s=${encodeURIComponent(query)}&post_type=product`;
+    console.log('Telefonika search URL:', searchUrl);
+
+    const response = await retry(() =>
+      fetch(searchUrl, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'Connection': 'keep-alive',
+          'Cache-Control': 'max-age=0',
+          'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+          'Sec-Ch-Ua-Mobile': '?0',
+          'Sec-Ch-Ua-Platform': '"macOS"',
+          'Sec-Fetch-Dest': 'document',
+          'Sec-Fetch-Mode': 'navigate',
+          'Sec-Fetch-Site': 'none',
+          'Sec-Fetch-User': '?1',
+          'Upgrade-Insecure-Requests': '1'
         }
       })
     );
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch from Telefonika: ${response.status}`);
+    }
+
     const html = await response.text();
     const $ = cheerio.load(html);
     const products: Product[] = [];
 
-    $('.product-item').each((_, element) => {
-      const title = $(element).find('.product-title').text().trim();
-      const priceText = $(element).find('.price').text().trim();
-      const price = parseFloat(priceText.replace(/[^0-9.]/g, ''));
-      const productUrl = $(element).find('a').attr('href') || '';
-      const imageUrl = $(element).find('img').attr('src') || '';
+    // Log the HTML for debugging
+    console.log('Telefonika HTML:', html.substring(0, 500));
 
-      if (title && price && productUrl && imageUrl) {
-        products.push({
-          title,
-          price,
-          currency: 'GHS',
-          productUrl,
-          imageUrl,
-          store: 'Telefonika',
-          rating: 0,
-          reviews: 0,
-          availability: true
-        });
+    // Updated selector for Telefonika's product grid
+    $('li.product').each((_, element) => {
+      try {
+        const title = $(element).find('.woocommerce-loop-product__title').text().trim();
+        const priceText = $(element).find('span.woocommerce-Price-amount').first().text().trim();
+        const price = parseFloat(priceText.replace(/[^0-9.]/g, ''));
+        const productUrl = $(element).find('a').first().attr('href') || '';
+        const imageUrl = $(element).find('img').first().attr('src') || '';
+
+        console.log('Found Telefonika product:', { title, price, productUrl, imageUrl });
+
+        if (title && !isNaN(price) && productUrl && imageUrl) {
+          const product: Product = {
+            id: uuidv4(),
+            title,
+            price,
+            currency: 'GHS',
+            productUrl,
+            imageUrl,
+            store: 'Telefonika',
+            rating: null,
+            reviews: null,
+            availability: true
+          };
+          products.push(product);
+        }
+      } catch (error) {
+        console.error('[Telefonika Scraper] Error processing product:', error);
       }
     });
 
@@ -210,6 +283,7 @@ async function scrapeTelefonika(query: string): Promise<ScrapingResult> {
       error: null
     };
   } catch (error) {
+    console.error('[Telefonika Scraper] Error:', error);
     return {
       success: false,
       products: [],
@@ -218,7 +292,7 @@ async function scrapeTelefonika(query: string): Promise<ScrapingResult> {
   }
 }
 
-async function scrapeJiji(query: string): Promise<ScrapingResult> {
+export async function scrapeJiji(query: string): Promise<ScrapingResult> {
   try {
     const response = await retry(() => 
       fetch(`https://jiji.com.gh/search?query=${encodeURIComponent(query)}`, {
@@ -240,6 +314,7 @@ async function scrapeJiji(query: string): Promise<ScrapingResult> {
 
       if (title && price && productUrl && imageUrl) {
         products.push({
+          id: uuidv4(),
           title,
           price,
           currency: 'GHS',
@@ -267,7 +342,7 @@ async function scrapeJiji(query: string): Promise<ScrapingResult> {
   }
 }
 
-async function scrapeAmazon(query: string): Promise<ScrapingResult> {
+export async function scrapeAmazon(query: string): Promise<ScrapingResult> {
   try {
     const response = await retry(() => 
       fetch(`https://www.amazon.com/s?k=${encodeURIComponent(query)}`, {
@@ -293,6 +368,7 @@ async function scrapeAmazon(query: string): Promise<ScrapingResult> {
 
       if (title && price && productUrl && imageUrl) {
         products.push({
+          id: uuidv4(),
           title,
           price,
           currency: 'GHS',

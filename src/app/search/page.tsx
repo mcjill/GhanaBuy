@@ -48,8 +48,7 @@ export default function SearchPage() {
       const params = new URLSearchParams(window.location.search);
       params.set('q', searchQuery);
       router.push(`/search?${params.toString()}`, { 
-        scroll: false,
-        shallow: true // This prevents full page reload
+        scroll: false
       });
     } catch (err) {
       setError('An error occurred while searching. Please try again.');

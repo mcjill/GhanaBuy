@@ -1,89 +1,166 @@
 import { Product, ScrapingResult, SearchRequest } from './types';
+import puppeteer from 'puppeteer';
 import { v4 as uuidv4 } from 'uuid';
-import * as cheerio from 'cheerio';
 
 export class TelefonikaScraper {
-  private readonly store = 'Telefonika' as const;
   private readonly baseUrl = 'https://telefonika.com';
+  private readonly store = 'Telefonika';
   private readonly currency = 'GHS';
 
   private getSearchUrl(query: string): string {
     return `${this.baseUrl}/?s=${encodeURIComponent(query)}&post_type=product`;
   }
 
+  private calculateRelevancyScore(title: string, query: string): number {
+    const searchTerms = query.toLowerCase().split(' ');
+    const titleTerms = title.toLowerCase().split(' ');
+    let score = 0;
+
+    // Exact match bonus
+    if (title.toLowerCase().includes(query.toLowerCase())) {
+      score += 5;
+    }
+
+    // Individual term matches
+    const termMatches = searchTerms.filter(term => 
+      titleTerms.some(titleTerm => titleTerm === term || titleTerm.includes(term))
+    ).length;
+    score += (termMatches / searchTerms.length) * 3;
+
+    // Brand name matches
+    const commonBrands = ['iphone', 'samsung', 'huawei', 'xiaomi', 'tecno', 'infinix'];
+    const brandMatches = searchTerms.filter(term =>
+      commonBrands.includes(term) && titleTerms.some(titleTerm => titleTerm.includes(term))
+    ).length;
+    score += brandMatches * 2;
+
+    // Penalize accessories
+    const accessoryIndicators = ['case', 'cover', 'protector', 'charger', 'cable'];
+    if (accessoryIndicators.some(word => title.toLowerCase().includes(word))) {
+      score *= 0.3;
+    }
+
+    return score / 10;
+  }
+
   async scrape(request: SearchRequest): Promise<ScrapingResult> {
+    let browser;
     try {
-      const searchUrl = this.getSearchUrl(request.query);
       console.log(`[TelefonikaScraper] Starting search for: ${request.query}`);
-      
-      const response = await fetch(searchUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.9',
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        }
+      browser = await puppeteer.launch({
+        headless: true,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-accelerated-2d-canvas',
+          '--disable-gpu',
+          '--window-size=1920x1080'
+        ]
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      const page = await browser.newPage();
+      await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+      await page.setViewport({ width: 1920, height: 1080 });
+      
+      const searchUrl = this.getSearchUrl(request.query);
+      console.log(`[TelefonikaScraper] Searching URL: ${searchUrl}`);
+
+      await page.goto(searchUrl, { waitUntil: 'networkidle0', timeout: 60000 });
+      
+      // Wait for either products or no results message with longer timeout
+      try {
+        await Promise.race([
+          page.waitForSelector('.products.elements-grid', { timeout: 45000 }),
+          page.waitForSelector('.woocommerce-info', { timeout: 45000 })
+        ]);
+      } catch (error) {
+        console.log('[TelefonikaScraper] Timeout waiting for results, checking page content...');
       }
 
-      const html = await response.text();
-      const $ = cheerio.load(html);
-      const products: Product[] = [];
+      // Extract products
+      const products = await page.evaluate((store, currency) => {
+        const items = document.querySelectorAll('.product-grid-item');
+        return Array.from(items).map(item => {
+          try {
+            const titleElement = item.querySelector('.product-title a, .wd-entities-title a');
+            const priceElement = item.querySelector('.price .amount, .price ins .amount, .price > .woocommerce-Price-amount');
+            const linkElement = item.querySelector('.product-title a, .wd-entities-title a');
+            const imageElement = item.querySelector('.product-image-link img, .attachment-woocommerce_thumbnail');
 
-      // Telefonika product grid - WooCommerce format
-      $('.product.type-product').each((_, element) => {
-        const productElement = $(element);
-        const link = productElement.find('a.woocommerce-loop-product__link');
-        const title = productElement.find('.woocommerce-loop-product__title').text().trim();
-        const priceText = productElement.find('.price .amount').text().trim();
-        const price = parseFloat(priceText.replace(/[^0-9.]/g, ''));
-        const productUrl = link.attr('href') || '';
-        const imageUrl = productElement.find('img.attachment-woocommerce_thumbnail').attr('src') || '';
+            const title = titleElement?.textContent?.trim() || '';
+            const priceText = priceElement?.textContent?.trim() || '';
+            const price = priceText ? parseFloat(priceText.replace(/[^0-9.]/g, '')) : 0;
+            const productUrl = linkElement?.getAttribute('href') || '';
+            const imageUrl = imageElement?.getAttribute('src') || imageElement?.getAttribute('data-src') || '';
 
-        // Check if title contains any of the search terms
-        const searchTerms = request.query.toLowerCase().split(/\s+/);
-        const titleLower = title.toLowerCase();
-        const allTermsPresent = searchTerms.every(term => {
-          // Special handling for model numbers (e.g., "15" in "iPhone 15")
-          if (/^\d+$/.test(term)) {
-            return titleLower.includes(term) && 
-              (titleLower.includes('iphone') || titleLower.includes('samsung') || titleLower.includes('pixel'));
+            if (!title || !price || !productUrl) {
+              console.log('[TelefonikaScraper] Skipping product due to missing data:', { title, price, productUrl });
+              return null;
+            }
+
+            return {
+              title,
+              price,
+              productUrl,
+              imageUrl,
+              store,
+              currency,
+              rating: null,
+              reviews: null,
+              availability: true
+            };
+          } catch (error) {
+            console.error('[TelefonikaScraper] Error processing product:', error);
+            return null;
           }
-          return titleLower.includes(term);
-        });
+        }).filter(Boolean);
+      }, this.store, this.currency);
 
-        if (title && price > 0 && allTermsPresent) {
-          products.push({
+      // Filter and process products
+      const processedProducts = products
+        .map((product: any) => {
+          if (!product || !product.title || !product.price) return null;
+
+          const relevancyScore = this.calculateRelevancyScore(product.title, request.query);
+          if (relevancyScore < 0.3) return null;
+
+          return {
             id: uuidv4(),
-            title,
-            price,
-            currency: this.currency,
-            productUrl: productUrl.startsWith('http') ? productUrl : `${this.baseUrl}${productUrl}`,
-            imageUrl: imageUrl.startsWith('http') ? imageUrl : `${this.baseUrl}${imageUrl}`,
-            store: this.store,
-            rating: null,
-            reviews: null
-          });
-        }
-      });
+            ...product,
+            metadata: {
+              searchQuery: request.query,
+              relevancyScore
+            }
+          };
+        })
+        .filter((product): product is Product => 
+          product !== null && 
+          typeof product === 'object' &&
+          'id' in product &&
+          'title' in product &&
+          'price' in product
+        );
 
-      console.log(`[TelefonikaScraper] Found ${products.length} products`);
+      console.log(`[TelefonikaScraper] Found ${processedProducts.length} products`);
+      
       return {
         success: true,
-        products: products.sort((a, b) => a.price - b.price),
+        products: processedProducts,
         error: null
       };
+
     } catch (error) {
-      console.error('Error scraping Telefonika:', error);
+      console.error('[TelefonikaScraper] Error:', error);
       return {
         success: false,
         products: [],
         error: error instanceof Error ? error.message : 'Unknown error occurred'
       };
+    } finally {
+      if (browser) {
+        await browser.close();
+      }
     }
   }
 }

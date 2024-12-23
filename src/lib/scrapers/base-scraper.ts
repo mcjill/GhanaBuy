@@ -123,7 +123,8 @@ export abstract class BaseScraper {
               imageUrl: image.startsWith('http') ? image : `${this.baseUrl}${image}`,
               store: this.store,
               rating,
-              reviews
+              reviews,
+              availability: true
             });
           }
         } catch (error) {

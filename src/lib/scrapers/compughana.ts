@@ -10,6 +10,58 @@ export class CompuGhanaScraper {
     return `${this.baseUrl}/catalogsearch/result/?q=${encodeURIComponent(query)}`;
   }
 
+  private calculateRelevancyScore(title: string, query: string): number {
+    const searchTerms = query.toLowerCase().split(' ');
+    const titleTerms = title.toLowerCase().split(' ');
+    let score = 0;
+
+    // Exact match bonus (highest weight)
+    if (title.toLowerCase().includes(query.toLowerCase())) {
+      score += 5;
+    }
+
+    // Individual term matches with strict checking
+    const termMatches = searchTerms.filter(term => 
+      titleTerms.some(titleTerm => 
+        // Check for exact term match or term as part of a word (e.g., "phone" in "iPhone")
+        titleTerm === term || 
+        (term.length > 3 && titleTerm.includes(term)) // Only allow partial matches for terms > 3 chars
+      )
+    ).length;
+
+    // Calculate term match ratio (0 to 1)
+    const termMatchRatio = termMatches / searchTerms.length;
+    score += termMatchRatio * 3;
+
+    // Brand name matches (specific to phones and electronics)
+    const commonBrands = ['iphone', 'apple', 'samsung', 'huawei', 'xiaomi', 'oppo', 'tecno', 'infinix'];
+    const brandMatches = searchTerms.filter(term =>
+      commonBrands.includes(term) && 
+      titleTerms.some(titleTerm => titleTerm.includes(term))
+    ).length;
+    score += brandMatches * 2;
+
+    // Model number matches (e.g., "13", "14" in "iPhone 13")
+    const modelMatches = searchTerms.filter(term =>
+      /^\d+$/.test(term) && // Check if term is a number
+      titleTerms.some(titleTerm => titleTerm === term)
+    ).length;
+    score += modelMatches * 2;
+
+    // Penalize irrelevant categories
+    const irrelevantTerms = ['case', 'cover', 'screen', 'protector', 'charger', 'cable', 'adapter'];
+    const hasIrrelevantTerms = titleTerms.some(term => irrelevantTerms.includes(term));
+    if (hasIrrelevantTerms) {
+      score *= 0.5;
+    }
+
+    // Normalize score to be between 0 and 1
+    const normalizedScore = score / (10 + (searchTerms.length * 2));
+    
+    // Set minimum threshold for relevancy
+    return normalizedScore >= 0.3 ? normalizedScore : 0;
+  }
+
   async scrape(request: SearchRequest): Promise<ScrapingResult> {
     try {
       const searchUrl = this.getSearchUrl(request.query);
@@ -72,7 +124,15 @@ export class CompuGhanaScraper {
           let imageUrl = imageElement.attr('src') || imageElement.attr('data-src') || '';
           console.log('[CompuGhanaScraper] Found image:', imageUrl);
 
-          if (title && price > 0 && productUrl) {
+          // Check stock status
+          const availability = !productElement.find('.stock.unavailable').length;
+
+          // Calculate relevancy score
+          const relevancyScore = this.calculateRelevancyScore(title, request.query);
+          console.log('[CompuGhanaScraper] Relevancy score:', { title, score: relevancyScore });
+
+          // Only add products with non-zero relevancy scores
+          if (title && price > 0 && productUrl && relevancyScore > 0) {
             products.push({
               id: `compughana-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
               title,
@@ -82,19 +142,43 @@ export class CompuGhanaScraper {
               imageUrl,
               store: this.store,
               rating: null,
-              reviews: null
+              reviews: null,
+              availability,
+              metadata: {
+                searchQuery: request.query,
+                originalTitle: title,
+                relevancyScore
+              }
             });
             console.log('[CompuGhanaScraper] Successfully added product:', title);
+          } else {
+            console.log('[CompuGhanaScraper] Skipped irrelevant product:', title);
           }
         } catch (error) {
           console.error('[CompuGhanaScraper] Error processing product:', error);
         }
       });
 
-      console.log(`[CompuGhanaScraper] Successfully scraped ${products.length} products`);
+      // Sort products by relevancy score
+      const sortedProducts = products.sort((a, b) => {
+        const scoreA = a.metadata?.relevancyScore || 0;
+        const scoreB = b.metadata?.relevancyScore || 0;
+        return scoreB - scoreA;
+      });
+
+      console.log(`[CompuGhanaScraper] Successfully scraped ${sortedProducts.length} relevant products out of ${productElements.length} total`);
+      
+      // Log top 3 most relevant products
+      if (sortedProducts.length > 0) {
+        console.log('[CompuGhanaScraper] Top 3 most relevant products:');
+        sortedProducts.slice(0, 3).forEach((product, index) => {
+          console.log(`${index + 1}. "${product.title}" (Score: ${product.metadata?.relevancyScore})`);
+        });
+      }
+
       return {
         success: true,
-        products,
+        products: sortedProducts,
         error: null
       };
 
@@ -103,7 +187,7 @@ export class CompuGhanaScraper {
       return {
         success: false,
         products: [],
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error occurred'
       };
     }
   }
