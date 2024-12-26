@@ -1,6 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: 'export',
+  basePath: '/Can-I-Buy',
   images: {
+    unoptimized: true,
     remotePatterns: [
       {
         protocol: 'https',
@@ -19,37 +22,25 @@ const nextConfig = {
       'jiji.com.gh',
       'pictures-ghana.jiji.ng',
       'static-gh.jiji.ng',
-      'media.jiji.ng',
-      'pictures.jiji.ng'
     ],
-    unoptimized: process.env.NODE_ENV === 'development'
   },
   webpack: (config, { dev, isServer }) => {
-    // Add polyfills for fetch in production
-    if (!dev && !isServer) {
-      config.resolve.fallback = {
-        ...config.resolve.fallback,
-        fs: false,
-        net: false,
-        tls: false,
-      };
-    }
-
+    // Add webpack configurations if needed
     return config;
   },
-  async headers() {
+  headers: () => {
     return [
       {
-        source: '/api/:path*',
+        source: '/:path*',
         headers: [
-          { key: 'Access-Control-Allow-Credentials', value: 'true' },
-          { key: 'Access-Control-Allow-Origin', value: '*' },
-          { key: 'Access-Control-Allow-Methods', value: 'GET,POST,OPTIONS' },
-          { key: 'Access-Control-Allow-Headers', value: 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version' },
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
         ],
       },
     ];
-  }
+  },
 };
 
-module.exports = nextConfig;
+export default nextConfig;

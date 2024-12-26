@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useState, useEffect } from 'react';
+import { MobileNav } from './mobile-nav';
 
 export function MainNav() {
   const pathname = usePathname();
@@ -41,9 +42,9 @@ export function MainNav() {
       active: pathname === '/compare',
     },
     {
-      href: '/analyze',
-      label: 'Analyze',
-      active: pathname === '/analyze',
+      href: '/blog',
+      label: 'Blog',
+      active: pathname === '/blog',
     },
   ];
 
@@ -56,7 +57,7 @@ export function MainNav() {
       }`}
     >
       <div className="container-apple">
-        <div className="flex h-12 items-center justify-between">
+        <div className="flex h-16 items-center justify-between">
           <Link 
             href="/"
             onClick={(e) => handleNavigation(e, '/')}
@@ -69,7 +70,9 @@ export function MainNav() {
               Beta
             </span>
           </Link>
-          <div className="flex gap-8">
+
+          {/* Desktop Navigation */}
+          <div className="hidden md:flex gap-8">
             {routes.map((route) => (
               <Link
                 key={route.href}
@@ -83,6 +86,9 @@ export function MainNav() {
               </Link>
             ))}
           </div>
+
+          {/* Mobile Navigation */}
+          <MobileNav routes={routes} onNavigate={handleNavigation} />
         </div>
       </div>
     </nav>

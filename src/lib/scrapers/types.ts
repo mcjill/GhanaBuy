@@ -20,8 +20,8 @@ export interface Product {
 
 export interface SearchRequest {
   query: string;
-  budget?: number;
-  currency?: string;
+  minBudget?: number; // Minimum price in GHS
+  maxBudget?: number; // Maximum price in GHS
 }
 
 export interface ScrapingResult {

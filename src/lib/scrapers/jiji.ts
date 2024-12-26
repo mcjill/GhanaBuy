@@ -1,148 +1,291 @@
-import { Product, ScrapingResult, SearchRequest } from './types';
+import type { Product, ScrapingResult, SearchRequest } from './types';
 import * as puppeteer from 'puppeteer';
 
 export class JijiScraper {
-  private readonly store = 'Jiji Ghana' as const;
-  private readonly baseUrl = 'https://jiji.com.gh';
-  private readonly currency = 'GHS';
+  private readonly baseUrl: string = 'https://jiji.com.gh';
+  private readonly store: string = 'Jiji';
+  private readonly currency: string = 'GHS';
+  private readonly maxRetries: number = 3;
 
-  private getSearchUrl(query: string): string {
-    return `${this.baseUrl}/search?query=${encodeURIComponent(query)}`;
+  private calculateRelevancyScore(title: string, query: string): number {
+    const searchTerms = query.toLowerCase().split(/\s+/);
+    const titleWords = title.toLowerCase().split(/\s+/);
+    let matchCount = 0;
+
+    for (const term of searchTerms) {
+      if (titleWords.some(word => word.includes(term))) {
+        matchCount++;
+      }
+    }
+
+    return matchCount / searchTerms.length;
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  private getSearchUrl(query: string, minBudget?: number, maxBudget?: number): string {
+    const searchParams = new URLSearchParams();
+    searchParams.append('query', query);
+    searchParams.append('sort_by', 'date_desc'); // Sort by newest first
+    
+    if (minBudget) {
+      searchParams.append('price_min', minBudget.toString());
+    }
+    if (maxBudget) {
+      searchParams.append('price_max', maxBudget.toString());
+    }
+    
+    return `${this.baseUrl}/search?${searchParams.toString()}`;
+  }
+
+  private parseTimestamp(timeText: string): Date | null {
+    try {
+      if (timeText.includes('just now')) {
+        return new Date();
+      }
+      
+      const minutesMatch = timeText.match(/(\d+)\s*minutes?\s*ago/);
+      if (minutesMatch) {
+        const date = new Date();
+        date.setMinutes(date.getMinutes() - parseInt(minutesMatch[1]));
+        return date;
+      }
+
+      const hoursMatch = timeText.match(/(\d+)\s*hours?\s*ago/);
+      if (hoursMatch) {
+        const date = new Date();
+        date.setHours(date.getHours() - parseInt(hoursMatch[1]));
+        return date;
+      }
+
+      const daysMatch = timeText.match(/(\d+)\s*days?\s*ago/);
+      if (daysMatch) {
+        const date = new Date();
+        date.setDate(date.getDate() - parseInt(daysMatch[1]));
+        return date;
+      }
+
+      // For specific dates like "Dec 25"
+      const dateMatch = timeText.match(/([A-Za-z]+)\s+(\d+)/);
+      if (dateMatch) {
+        const date = new Date();
+        const month = new Date(Date.parse(`${dateMatch[1]} 1, 2000`)).getMonth();
+        date.setMonth(month);
+        date.setDate(parseInt(dateMatch[2]));
+        return date;
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Error parsing timestamp:', error);
+      return null;
+    }
+  }
+
+  private normalizeTitle(title: string): string {
+    return title
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  private deduplicateProducts(products: any[]): any[] {
+    const seen = new Map();
+    
+    return products.filter(product => {
+      // Create a unique key based on normalized title and price
+      const normalizedTitle = this.normalizeTitle(product.title);
+      const price = parseFloat(product.price.replace(/[^0-9.]/g, ''));
+      const key = `${normalizedTitle}-${price}`;
+      
+      if (seen.has(key)) {
+        return false;
+      }
+      
+      seen.set(key, true);
+      return true;
+    });
   }
 
   async scrape(request: SearchRequest): Promise<ScrapingResult> {
-    let browser;
-    try {
-      const searchUrl = this.getSearchUrl(request.query);
-      console.log(`[JijiScraper] Starting search for: ${request.query}`);
-      
-      browser = await puppeteer.launch({
-        headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-accelerated-2d-canvas',
-          '--disable-gpu',
-          '--window-size=1920x1080'
-        ]
-      });
+    const { query, minBudget, maxBudget } = request;
+    let browser: puppeteer.Browser | null = null;
+    let retries = this.maxRetries;
 
-      const page = await browser.newPage();
-      await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-      await page.setViewport({ width: 1920, height: 1080 });
-      
-      // Set longer timeout for navigation
-      await page.setDefaultNavigationTimeout(60000);
-      
-      console.log(`[JijiScraper] Navigating to: ${searchUrl}`);
-      
-      // Navigate to search page with longer timeout
-      await page.goto(searchUrl, { 
-        waitUntil: 'networkidle0',
-        timeout: 60000 
-      });
-      
-      console.log('[JijiScraper] Page loaded, waiting for content');
-      
-      // Wait for either products or no results message
+    while (retries > 0) {
       try {
-        await Promise.race([
-          page.waitForSelector('.masonry-wall', { timeout: 45000 }),
-          page.waitForSelector('.b-list-advert__gallery__item', { timeout: 45000 }),
-          page.waitForSelector('.qa-no-results', { timeout: 45000 })
-        ]);
-      } catch (error) {
-        console.log('[JijiScraper] Timeout waiting for results, checking page content...');
-      }
+        console.log(`[JijiScraper] Starting search for: ${query}`);
+        console.log(`[JijiScraper] Budget range: ${minBudget || 0} - ${maxBudget || 'unlimited'} GHS`);
+        console.log(`[JijiScraper] Attempt ${this.maxRetries - retries + 1} of ${this.maxRetries}`);
+        
+        browser = await puppeteer.launch({
+          headless: 'new',
+          args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--disable-gpu',
+            '--window-size=1920,1080'
+          ]
+        });
+        
+        const page = await browser.newPage();
+        
+        // Set a more realistic viewport
+        await page.setViewport({ width: 1920, height: 1080 });
+        
+        // Set a more realistic user agent
+        await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+        
+        // Set extra headers to look more like a real browser
+        await page.setExtraHTTPHeaders({
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+          'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+          'sec-ch-ua-mobile': '?0',
+          'sec-ch-ua-platform': '"macOS"'
+        });
 
-      // Check if no results found
-      const noResults = await page.$('.qa-no-results');
-      if (noResults) {
-        console.log('[JijiScraper] No results found');
+        // Enable JavaScript and cookies
+        await page.setJavaScriptEnabled(true);
+        
+        // Navigate to search URL with price range parameters
+        const searchUrl = this.getSearchUrl(query, minBudget, maxBudget);
+        console.log(`[JijiScraper] Accessing URL: ${searchUrl}`);
+        
+        // Navigate with a longer timeout
+        await page.goto(searchUrl, { 
+          waitUntil: 'networkidle2',  
+          timeout: 60000  
+        });
+
+        // Initial delay before starting to look for elements
+        await this.delay(3000);
+
+        // Wait for any of these selectors to appear
+        const selectors = [
+          '.b-list-advert__item-wrapper',
+          '.qa-advert-list-item',
+          '.b-advert-list-item',
+          '.js-advert-list-item'
+        ];
+
+        let productContainer = null;
+        for (const selector of selectors) {
+          try {
+            productContainer = await page.waitForSelector(selector, { 
+              timeout: 10000,
+              visible: true 
+            });
+            if (productContainer) {
+              console.log(`[JijiScraper] Found products with selector: ${selector}`);
+              break;
+            }
+          } catch (error) {
+            console.log(`[JijiScraper] Selector ${selector} not found, trying next...`);
+            continue;
+          }
+        }
+
+        if (!productContainer) {
+          throw new Error('No product listings found on page');
+        }
+
+        // Scroll down a bit to trigger lazy loading
+        await page.evaluate(() => {
+          window.scrollBy(0, 500);
+        });
+        await this.delay(2000);
+
+        // Get all product links and their timestamps
+        const products = await page.evaluate(() => {
+          const items = Array.from(document.querySelectorAll([
+            '.b-list-advert__item-wrapper',
+            '.qa-advert-list-item',
+            '.b-advert-list-item',
+            '.js-advert-list-item'
+          ].join(', ')));
+
+          return items.map(item => {
+            const titleEl = item.querySelector('.qa-advert-title, .b-advert-title-inner, .b-advert-title, h3');
+            const priceEl = item.querySelector('.qa-advert-price, .b-advert-price-inner, .b-advert-price, .price');
+            const linkEl = item.querySelector('a');
+            const imageEl = item.querySelector('img');
+            const timeEl = item.querySelector('.b-list-advert__item-time, .qa-advert-time, time');
+
+            return {
+              title: titleEl?.textContent?.trim() || '',
+              price: priceEl?.textContent?.trim() || '',
+              link: linkEl?.href || '',
+              image: imageEl?.src || '',
+              timestamp: timeEl?.textContent?.trim() || ''
+            };
+          });
+        });
+
+        // Deduplicate products
+        const uniqueProducts = this.deduplicateProducts(products);
+
+        // Close browser
+        await browser.close();
+        browser = null;
+
+        // Process and return products
+        const processedProducts = uniqueProducts
+          .map(item => ({
+            id: `jiji-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            title: item.title,
+            price: parseFloat(item.price.replace(/[^0-9.]/g, '')),
+            currency: this.currency,
+            productUrl: item.link,
+            imageUrl: item.image,
+            store: this.store,
+            rating: null,
+            metadata: {
+              relevancyScore: this.calculateRelevancyScore(item.title, query),
+              timestamp: this.parseTimestamp(item.timestamp)
+            }
+          }))
+          .filter(product => {
+            if (!product.price) return false;
+            if (minBudget && product.price < minBudget) return false;
+            if (maxBudget && product.price > maxBudget) return false;
+            return true;
+          });
+
+        console.log(`[JijiScraper] Found ${processedProducts.length} products`);
         return {
           success: true,
-          products: [],
-          error: null
+          products: processedProducts
         };
-      }
 
-      // Extract product data with retry mechanism
-      let retryCount = 0;
-      let products = [];
-      
-      while (retryCount < 3 && products.length === 0) {
-        products = await page.evaluate((store, currency) => {
-          const items: any[] = [];
-          const productCards = document.querySelectorAll('.b-list-advert__gallery__item');
-          
-          console.log(`[JijiScraper] Found ${productCards.length} product cards`);
-
-          productCards.forEach((card) => {
-            try {
-              const titleElement = card.querySelector('.b-advert-title-inner');
-              const priceElement = card.querySelector('.qa-advert-price');
-              const linkElement = card.querySelector('a.b-list-advert-base');
-              const imageElement = card.querySelector('img[data-nuxt-pic]');
-
-              if (titleElement && priceElement && linkElement) {
-                const title = titleElement.textContent?.trim();
-                const priceText = priceElement.textContent?.trim();
-                const price = priceText ? parseFloat(priceText.replace(/[^0-9.]/g, '')) : 0;
-                const productUrl = linkElement.getAttribute('href');
-                const imageUrl = imageElement?.getAttribute('data-src') || imageElement?.getAttribute('src');
-
-                if (title && price && productUrl) {
-                  items.push({
-                    id: crypto.randomUUID(),
-                    title,
-                    price,
-                    currency,
-                    productUrl: productUrl.startsWith('http') ? productUrl : `${window.location.origin}${productUrl}`,
-                    imageUrl: imageUrl || '',
-                    store,
-                    rating: null,
-                    reviews: null,
-                    availability: true
-                  });
-                }
-              }
-            } catch (error) {
-              console.error('[JijiScraper] Error processing product card:', error);
-            }
-          });
-          return items;
-        }, this.store, this.currency);
-
-        if (products.length === 0 && retryCount < 2) {
-          console.log(`[JijiScraper] No products found, retrying... (attempt ${retryCount + 1}/3)`);
-          await new Promise(resolve => setTimeout(resolve, 2000));
-          retryCount++;
-        } else {
-          break;
+      } catch (error) {
+        console.error('[JijiScraper] Error:', error);
+        retries--;
+        if (browser) {
+          await browser.close();
+          browser = null;
         }
-      }
-
-      console.log(`[JijiScraper] Successfully extracted ${products.length} products`);
-
-      return {
-        success: true,
-        products,
-        error: null
-      };
-
-    } catch (error) {
-      console.error('[JijiScraper] Error:', error);
-      return {
-        success: false,
-        products: [],
-        error: error instanceof Error ? error.message : 'Unknown error occurred'
-      };
-    } finally {
-      if (browser) {
-        await browser.close();
+        if (retries === 0) {
+          return {
+            success: false,
+            error: 'Failed to scrape Jiji after multiple retries',
+            products: []
+          };
+        }
+        // Add increasing delay between retries
+        await this.delay(2000 * (3 - retries));
       }
     }
+
+    return {
+      success: false,
+      error: 'Failed to scrape Jiji',
+      products: []
+    };
   }
 }
 

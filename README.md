@@ -2,6 +2,10 @@
 
 A modern web application helping Ghanaian consumers make informed financial decisions by comparing product prices across e-commerce platforms.
 
+## 🌐 Live Demo
+
+Check out the live demo at [https://mcjill.github.io/Can-I-Buy](https://mcjill.github.io/Can-I-Buy)
+
 ## 🚀 Features
 
 - Real-time price comparison across multiple platforms
@@ -9,6 +13,7 @@ A modern web application helping Ghanaian consumers make informed financial deci
 - Smart financial decision assistance
 - Beautiful, responsive UI
 - Cross-platform compatibility
+- Blog with shopping insights and tips
 
 ## 🛠️ Tech Stack
 
@@ -44,6 +49,38 @@ npm run dev
 ```
 
 5. Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+## 🚀 Deployment
+
+### GitHub Pages
+
+The project is configured for automatic deployment to GitHub Pages. When you push to the `main` branch, GitHub Actions will:
+
+1. Build the Next.js application
+2. Export static files
+3. Deploy to GitHub Pages
+
+The deployment process is handled by the workflow in `.github/workflows/deploy.yml`.
+
+To manually trigger a deployment:
+
+1. Go to the repository's Actions tab
+2. Select "Deploy to GitHub Pages"
+3. Click "Run workflow"
+
+### Environment Variables
+
+For local development, create a `.env.local` file with:
+
+```bash
+NEXT_PUBLIC_BASE_URL=http://localhost:3000
+```
+
+For production, set:
+
+```bash
+NEXT_PUBLIC_BASE_URL=https://mcjill.github.io/Can-I-Buy
+```
 
 ## 📦 Production Deployment
 

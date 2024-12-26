@@ -4,6 +4,7 @@ import './globals.css';
 import Link from 'next/link';
 import { ClientLayout } from '@/components/layout/client-layout';
 import { NotificationProvider } from '@/components/notifications/notification-provider';
+import { Toaster } from "@/components/ui/toaster";
 
 const inter = Inter({
   subsets: ['latin'],
@@ -97,6 +98,7 @@ export default function RootLayout({
             </div>
           </footer>
         </div>
+        <Toaster />
       </body>
     </html>
   );

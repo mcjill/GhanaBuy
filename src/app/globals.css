@@ -209,6 +209,23 @@ p {
   animation-delay: -3s;
 }
 
+@keyframes gradient-xy {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.animate-gradient-xy {
+  background-size: 400% 400%;
+  animation: gradient-xy 15s ease infinite;
+}
+
 /* Glassmorphism Effects */
 .glass-nav {
   background: rgba(255, 255, 255, 0.7);

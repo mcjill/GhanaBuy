@@ -2,6 +2,7 @@
   "name": "can-i-buy",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -14,23 +15,32 @@
     "test-jiji": "ts-node scripts/test-jiji.ts",
     "test-jumia": "ts-node scripts/test-jumia.ts",
     "test-compughana": "ts-node scripts/test-compughana.ts",
-    "test-scrapers": "ts-node scripts/test-scrapers.ts"
+    "test-scrapers": "ts-node scripts/test-scrapers.ts",
+    "test:jiji": "NODE_NO_WARNINGS=1 tsx src/test/test-jiji-scraper.ts",
+    "test:jumia": "NODE_NO_WARNINGS=1 tsx src/test/test-jumia-scraper.ts",
+    "test:compughana": "NODE_NO_WARNINGS=1 tsx src/test/test-compughana-scraper.ts",
+    "test:telefonika": "NODE_NO_WARNINGS=1 tsx src/test/test-telefonika-scraper.ts",
+    "test:jumia-tv": "NODE_NO_WARNINGS=1 tsx src/test/test-jumia-tv.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.7.0",
+    "@radix-ui/react-checkbox": "^1.1.3",
     "@radix-ui/react-dialog": "^1.0.5",
+    "@radix-ui/react-label": "^2.1.1",
     "@radix-ui/react-popover": "^1.0.7",
     "@radix-ui/react-select": "^2.0.0",
     "@radix-ui/react-tabs": "^1.1.2",
+    "@radix-ui/react-toast": "^1.2.4",
     "@tanstack/react-query": "^5.62.8",
     "@types/node-fetch": "^2.6.12",
     "@types/uuid": "^10.0.0",
+    "@types/xml2js": "^0.4.14",
     "@upstash/redis": "^1.34.3",
     "@vercel/analytics": "^1.4.1",
-    "axios": "^1.6.2",
+    "axios": "^1.7.9",
     "chart.js": "^4.4.6",
     "cheerio": "^1.0.0-rc.12",
-    "class-variance-authority": "^0.7.0",
+    "class-variance-authority": "^0.7.1",
     "clsx": "^2.0.0",
     "cmdk": "^0.2.0",
     "date-fns": "^2.30.0",
@@ -50,11 +60,13 @@
     "tailwind-merge": "^2.0.0",
     "tailwindcss-animate": "^1.0.7",
     "uuid": "^11.0.3",
+    "xml2js": "^0.6.2",
     "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/cheerio": "^0.22.35",
     "@types/node": "^20.17.10",
+    "@types/puppeteer": "^7.0.4",
     "@types/react": "^18.2.38",
     "@types/react-dom": "^18.2.17",
     "@typescript-eslint/eslint-plugin": "^8.15.0",
@@ -67,6 +79,7 @@
     "prisma": "^5.7.0",
     "tailwindcss": "^3.3.5",
     "ts-node": "^10.9.2",
-    "typescript": "^5.3.2"
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
   }
 }

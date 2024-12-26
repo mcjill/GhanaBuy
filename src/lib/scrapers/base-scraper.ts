@@ -1,4 +1,4 @@
-import { Product, ScrapingResult } from './types';
+import { Product, ScrapingResult, SearchRequest } from './types';
 import * as cheerio from 'cheerio';
 import { retry } from '../utils/retry';
 import { v4 as uuidv4 } from 'uuid';
@@ -39,7 +39,56 @@ export abstract class BaseScraper {
     };
   }
 
-  async scrape(query: string): Promise<ScrapingResult> {
+  protected filterByBudgetRange(products: Product[], minBudget?: number, maxBudget?: number): Product[] {
+    return products.filter(product => {
+      const price = product.price;
+      if (!price) return false;
+      
+      // Check minimum budget if specified
+      if (minBudget !== undefined && price < minBudget) {
+        return false;
+      }
+      
+      // Check maximum budget if specified
+      if (maxBudget !== undefined && price > maxBudget) {
+        return false;
+      }
+      
+      return true;
+    });
+  }
+
+  protected processProducts(products: Product[], request: SearchRequest): Product[] {
+    let processedProducts = products
+      .map(product => ({
+        ...product,
+        metadata: {
+          ...product.metadata,
+          relevancyScore: this.calculateRelevancyScore(product.title, request.query)
+        }
+      }))
+      .filter(product => {
+        const score = product.metadata?.relevancyScore ?? 0;
+        return score > 0;
+      })
+      .sort((a, b) => (b.metadata?.relevancyScore ?? 0) - (a.metadata?.relevancyScore ?? 0));
+
+    // Apply budget range filter if specified
+    processedProducts = this.filterByBudgetRange(
+      processedProducts, 
+      request.minBudget, 
+      request.maxBudget
+    );
+
+    return processedProducts;
+  }
+
+  protected calculateRelevancyScore(title: string, query: string): number {
+    // TO DO: implement relevancy score calculation
+    return 1;
+  }
+
+  async scrape(query: string, request: SearchRequest): Promise<ScrapingResult> {
     try {
       const searchUrl = this.getSearchUrl(query);
       console.log(`Scraping ${this.store} with URL: ${searchUrl}`);
@@ -124,7 +173,8 @@ export abstract class BaseScraper {
               store: this.store,
               rating,
               reviews,
-              availability: true
+              availability: true,
+              metadata: {}
             });
           }
         } catch (error) {
@@ -132,12 +182,12 @@ export abstract class BaseScraper {
         }
       });
 
-      const validProducts = products.filter(p => p.title && p.price > 0);
-      console.log(`Found ${validProducts.length} valid products from ${this.store}`);
+      const processedProducts = this.processProducts(products, request);
+      console.log(`Found ${processedProducts.length} valid products from ${this.store}`);
 
       return {
-        success: validProducts.length > 0,
-        products: validProducts,
+        success: processedProducts.length > 0,
+        products: processedProducts,
         error: null
       };
     } catch (error) {

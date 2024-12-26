@@ -1,4 +1,4 @@
-import type { Product, ScrapingResult } from '../lib/scrapers/types';
+import type { Product, ScrapingResult, SearchRequest } from '../lib/scrapers/types';
 import * as cheerio from 'cheerio';
 import { retry } from '../lib/utils/retry';
 import { v4 as uuidv4 } from 'uuid';
@@ -6,16 +6,17 @@ import { v4 as uuidv4 } from 'uuid';
 const STORE_NAMES = ['Jiji Ghana', 'CompuGhana', 'Jumia', 'Telefonika', 'Amazon'] as const;
 type StoreName = typeof STORE_NAMES[number];
 
-export async function scrapeAllSources(query: string): Promise<ScrapingResult> {
+export async function scrapeAllSources(query: string, minBudget?: number, maxBudget?: number): Promise<ScrapingResult> {
   try {
-    console.log('Starting to scrape all sources for query:', query);
+    console.log(`[Scrapers] Starting to scrape all sources for query: ${query}`);
+    console.log(`[Scrapers] Price range: ${minBudget || 0} - ${maxBudget || 'unlimited'} GHS`);
     
     const results = await Promise.allSettled([
-      scrapeJiji(query),      // Add Jiji first as it's prioritized
-      scrapeCompuGhana(query),
-      scrapeJumia(query),
-      scrapeTelefonika(query),
-      scrapeAmazon(query),
+      scrapeJiji({ query, minBudget, maxBudget }),      // Add Jiji first as it's prioritized
+      scrapeCompuGhana({ query, minBudget, maxBudget }),
+      scrapeJumia({ query, minBudget, maxBudget }),
+      scrapeTelefonika({ query, minBudget, maxBudget }),
+      scrapeAmazon({ query, minBudget, maxBudget }),
     ]);
 
     const products: Product[] = [];
@@ -25,16 +26,16 @@ export async function scrapeAllSources(query: string): Promise<ScrapingResult> {
       if (result.status === 'fulfilled') {
         const source = result.value;
         if (source.products && source.products.length > 0) {
-          console.log(`Successfully scraped ${source.products.length} products from ${STORE_NAMES[index]}`);
+          console.log(`[Scrapers] Successfully scraped ${source.products.length} products from ${STORE_NAMES[index]}`);
           products.push(...source.products);
         } else {
-          console.log(`No products found from ${STORE_NAMES[index]}`);
+          console.log(`[Scrapers] No products found from ${STORE_NAMES[index]}`);
         }
         if (source.error) {
           errors.push(`${STORE_NAMES[index]}: ${source.error}`);
         }
       } else {
-        console.error(`Failed to scrape ${STORE_NAMES[index]}:`, result.reason);
+        console.error(`[Scrapers] Failed to scrape ${STORE_NAMES[index]}:`, result.reason);
         errors.push(`${STORE_NAMES[index]}: ${result.reason.toString()}`);
       }
     });
@@ -42,7 +43,7 @@ export async function scrapeAllSources(query: string): Promise<ScrapingResult> {
     // Sort products by price
     products.sort((a, b) => a.price - b.price);
 
-    console.log(`Total products found across all sources: ${products.length}`);
+    console.log(`[Scrapers] Total products found across all sources: ${products.length}`);
     
     return {
       success: products.length > 0,
@@ -50,7 +51,7 @@ export async function scrapeAllSources(query: string): Promise<ScrapingResult> {
       error: errors.length > 0 ? errors.join('; ') : null
     };
   } catch (error) {
-    console.error('Error in scrapeAllSources:', error);
+    console.error('[Scrapers] Error in scrapeAllSources:', error);
     return {
       success: false,
       products: [],
@@ -59,7 +60,7 @@ export async function scrapeAllSources(query: string): Promise<ScrapingResult> {
   }
 }
 
-export async function scrapeJumia(query: string): Promise<ScrapingResult> {
+export async function scrapeJumia({ query, minBudget, maxBudget }: SearchRequest): Promise<ScrapingResult> {
   try {
     const searchUrl = `https://www.jumia.com.gh/catalog/?q=${encodeURIComponent(query)}`;
     console.log('Jumia search URL:', searchUrl);
@@ -142,63 +143,13 @@ export async function scrapeJumia(query: string): Promise<ScrapingResult> {
   }
 }
 
-export async function scrapeCompuGhana(query: string): Promise<ScrapingResult> {
+export async function scrapeCompuGhana({ query, minBudget, maxBudget }: SearchRequest): Promise<ScrapingResult> {
   try {
-    const searchUrl = `https://compughana.com/catalogsearch/result/?q=${encodeURIComponent(query)}`;
-    const response = await retry(() =>
-      fetch(searchUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        }
-      })
-    );
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch from CompuGhana: ${response.status}`);
-    }
-
-    const html = await response.text();
-    const $ = cheerio.load(html);
-    const products: Product[] = [];
-
-    // Log the HTML for debugging
-    console.log('CompuGhana HTML:', html.substring(0, 500));
-
-    $('.product-item-info').each((_, element) => {
-      try {
-        const title = $(element).find('.product-item-name').text().trim();
-        const priceText = $(element).find('.price').first().text().trim();
-        const price = parseFloat(priceText.replace(/[^0-9.]/g, ''));
-        const productUrl = $(element).find('.product-item-name a').attr('href') || '';
-        const imageUrl = $(element).find('.product-image-photo').attr('src') || '';
-
-        console.log('Found product:', { title, price, productUrl, imageUrl });
-
-        if (title && !isNaN(price) && productUrl && imageUrl) {
-          const product: Product = {
-            id: uuidv4(),
-            title,
-            price,
-            currency: 'GHS',
-            productUrl,
-            imageUrl,
-            store: 'CompuGhana',
-            rating: null,
-            reviews: null,
-            availability: true
-          };
-          products.push(product);
-        }
-      } catch (error) {
-        console.error('[CompuGhana Scraper] Error processing product:', error);
-      }
-    });
-
-    return {
-      success: products.length > 0,
-      products,
-      error: null
-    };
+    console.log(`[CompuGhanaScraper] Starting search for: ${query}`);
+    console.log(`[CompuGhanaScraper] Budget range: ${minBudget || 0} - ${maxBudget || 'unlimited'} GHS`);
+    const { compuGhanaScraper } = await import('../lib/scrapers/compughana');
+    const result = await compuGhanaScraper.scrape({ query, minBudget, maxBudget });
+    return result;
   } catch (error) {
     console.error('[CompuGhana Scraper] Error:', error);
     return {
@@ -209,7 +160,7 @@ export async function scrapeCompuGhana(query: string): Promise<ScrapingResult> {
   }
 }
 
-export async function scrapeTelefonika(query: string): Promise<ScrapingResult> {
+export async function scrapeTelefonika({ query, minBudget, maxBudget }: SearchRequest): Promise<ScrapingResult> {
   try {
     const searchUrl = `https://telefonika.com/?s=${encodeURIComponent(query)}&post_type=product`;
     console.log('Telefonika search URL:', searchUrl);
@@ -292,7 +243,7 @@ export async function scrapeTelefonika(query: string): Promise<ScrapingResult> {
   }
 }
 
-export async function scrapeJiji(query: string): Promise<ScrapingResult> {
+export async function scrapeJiji({ query, minBudget, maxBudget }: SearchRequest): Promise<ScrapingResult> {
   try {
     const response = await retry(() => 
       fetch(`https://jiji.com.gh/search?query=${encodeURIComponent(query)}`, {
@@ -342,7 +293,7 @@ export async function scrapeJiji(query: string): Promise<ScrapingResult> {
   }
 }
 
-export async function scrapeAmazon(query: string): Promise<ScrapingResult> {
+export async function scrapeAmazon({ query, minBudget, maxBudget }: SearchRequest): Promise<ScrapingResult> {
   try {
     const response = await retry(() => 
       fetch(`https://www.amazon.com/s?k=${encodeURIComponent(query)}`, {
