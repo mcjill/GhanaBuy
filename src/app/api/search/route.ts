@@ -88,14 +88,24 @@ function sanitizeProduct(product: Product, query: string): SanitizedProduct {
   const isExactMatch = termMatchCount === searchTerms.length;
 
   return {
-    ...product,
+    id: product.id,
+    title: product.title,
+    price: product.price,
+    currency: product.currency,
+    productUrl: product.productUrl,
+    imageUrl: product.imageUrl,
+    store: product.store,
+    rating: product.rating,
+    reviews: product.reviews,
+    availability: product.availability,
+    metadata: product.metadata,
     sanitizedTitle,
     sanitizedBrand: brand,
     sanitizedModel: model,
     isExactMatch,
     matchedTerms,
     termMatchCount
-  };
+  } as SanitizedProduct;
 }
 
 function calculateEnhancedRelevancyScore(product: SanitizedProduct, query: string): number {

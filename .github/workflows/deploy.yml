@@ -33,12 +33,16 @@ jobs:
         run: npm ci
         
       - name: Build with Next.js
-        run: npm run build
+        run: |
+          npm run build
+          touch out/.nojekyll
+        env:
+          NEXT_PUBLIC_BASE_PATH: /Can-I-Buy
         
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./out
+          path: ./.next
 
   deploy:
     environment:

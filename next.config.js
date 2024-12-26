@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'export',
-  basePath: '/Can-I-Buy',
+  // Remove output: 'export' to enable API routes
+  basePath: process.env.NODE_ENV === 'production' ? '/Can-I-Buy' : '',
   images: {
     unoptimized: true,
     remotePatterns: [

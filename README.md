@@ -15,6 +15,42 @@ Check out the live demo at [https://mcjill.github.io/Can-I-Buy](https://mcjill.g
 - Cross-platform compatibility
 - Blog with shopping insights and tips
 
+## 🔍 Supported E-commerce Platforms
+
+Currently, we support price comparison across these Ghanaian e-commerce platforms:
+
+- CompuGhana
+- Telefonika
+- More platforms coming soon!
+
+## 🤖 Smart Scraping Features
+
+Our advanced scraping system includes:
+
+- Intelligent relevancy scoring for accurate product matches
+- Anti-bot detection avoidance
+- Automatic retry mechanisms
+- Smart product categorization
+- Exact phrase matching
+- Price normalization
+- Robust error handling
+
+## 🔄 Recent Updates
+
+### December 2024
+- Enhanced CompuGhana scraper with improved anti-bot measures
+- Added intelligent relevancy scoring for better search results
+- Improved error handling and retry mechanisms
+- Enhanced product matching accuracy
+- Added support for exact phrase matching
+- Implemented smart category-based filtering
+
+### Performance Improvements
+- Optimized request handling
+- Added request interception for faster page loads
+- Implemented intelligent resource filtering
+- Added exponential backoff for failed requests
+
 ## 🛠️ Tech Stack
 
 - Next.js 14

@@ -7,6 +7,7 @@ interface RawProduct {
   priceFormatted: string;
   productUrl: string;
   imageUrl: string;
+  category?: string;
 }
 
 export class TelefonikaScraper implements Scraper {
@@ -14,7 +15,15 @@ export class TelefonikaScraper implements Scraper {
   readonly baseUrl = 'https://telefonika.com';
   private readonly currency = 'GHS';
   private readonly maxRetries = 3;
-  private readonly navigationTimeout = 60000; // Increased to 60s
+  private readonly navigationTimeout = 60000;
+
+  // Product categories and their keywords
+  private readonly categoryKeywords: Record<string, string[]> = {
+    'air-condition': ['air condition', 'air conditioner', 'ac', 'hvac'],
+    'phone': ['phone', 'iphone', 'samsung', 'android'],
+    'laptop': ['laptop', 'macbook', 'notebook'],
+    'accessory': ['case', 'cover', 'protector', 'charger', 'cable', 'airpod', 'earbud', 'headphone']
+  };
 
   private async delay(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -35,38 +44,84 @@ export class TelefonikaScraper implements Scraper {
     });
   }
 
-  protected calculateRelevancyScore(title: string, query: string): number {
+  private detectCategory(title: string, query: string): string | null {
     const titleLower = title.toLowerCase();
-    const queryWords = query.toLowerCase().split(' ');
+    const queryLower = query.toLowerCase();
+
+    // First try to match the query to a category
+    for (const [category, keywords] of Object.entries(this.categoryKeywords)) {
+      if (keywords.some(keyword => queryLower.includes(keyword))) {
+        // If we found a category from the query, verify the title matches it
+        if (keywords.some(keyword => titleLower.includes(keyword))) {
+          return category;
+        }
+      }
+    }
+
+    // If no category matched the query, try to detect category from title
+    for (const [category, keywords] of Object.entries(this.categoryKeywords)) {
+      if (keywords.some(keyword => titleLower.includes(keyword))) {
+        return category;
+      }
+    }
+
+    return null;
+  }
+
+  protected calculateRelevancyScore(title: string, query: string, category: string | null): number {
+    const titleLower = title.toLowerCase();
+    const queryWords = query.toLowerCase().split(' ').filter(word => word.length > 2);
+    
+    // If category doesn't match the query's intended category, return 0
+    const queryCategory = Object.entries(this.categoryKeywords)
+      .find(([_, keywords]) => keywords.some(keyword => query.toLowerCase().includes(keyword)))?.[0];
+    
+    if (queryCategory && category !== queryCategory) {
+      return 0;
+    }
+
+    // Calculate word match score
     const matchedWords = queryWords.filter(word => titleLower.includes(word));
-    const score = matchedWords.length / queryWords.length;
+    let score = matchedWords.length / queryWords.length;
 
-    // Penalize if it's not the right product category
-    if (!titleLower.includes('iphone') && queryWords.includes('iphone')) {
-      return score * 0.1; // Heavy penalty for non-iPhone products when searching for iPhone
+    // Exact phrase matching bonus
+    if (titleLower.includes(query.toLowerCase())) {
+      score *= 1.5;
     }
 
-    // Penalize if it's an accessory
-    if (titleLower.includes('case') || titleLower.includes('screen') || titleLower.includes('protector')) {
-      return score * 0.3;
+    // Penalize accessories when not specifically searching for them
+    if (category === 'accessory' && !queryWords.some(word => 
+      this.categoryKeywords.accessory.some(keyword => word.includes(keyword)))) {
+      score *= 0.1;
     }
 
-    return score;
+    // Penalize if the title contains irrelevant category keywords
+    const otherCategories = Object.entries(this.categoryKeywords)
+      .filter(([cat, _]) => cat !== category)
+      .flatMap(([_, keywords]) => keywords);
+    
+    if (otherCategories.some(keyword => titleLower.includes(keyword))) {
+      score *= 0.5;
+    }
+
+    return Math.min(score, 1);
   }
 
   private getSearchUrl(query: string): string {
-    return `${this.baseUrl}/?s=${encodeURIComponent(query)}&post_type=product`;
+    // Clean and normalize the search query
+    const cleanQuery = query.trim()
+      .replace(/[^\w\s-]/g, '') // Remove special characters
+      .replace(/\s+/g, ' '); // Normalize spaces
+    return `${this.baseUrl}/?s=${encodeURIComponent(cleanQuery)}&post_type=product`;
   }
 
   private async getSearchResults(page: Page, minBudget: number, maxBudget: number): Promise<RawProduct[]> {
-    // Wait for either products or no results message with longer timeout
     await Promise.race([
       page.waitForSelector('.products.wd-products, .products.elements-grid', { timeout: this.navigationTimeout }),
       page.waitForSelector('.woocommerce-info, .no-products-found, .no-results', { timeout: this.navigationTimeout })
     ]);
 
-    // Get all products
-    const rawProducts = await page.evaluate((minBudget, maxBudget) => {
+    return await page.evaluate((minBudget, maxBudget) => {
       const items = document.querySelectorAll('.products.wd-products .product-grid-item, .product.type-product');
       console.log(`[TelefonikaScraper Browser] Found ${items.length} product items`);
       
@@ -76,6 +131,7 @@ export class TelefonikaScraper implements Scraper {
           const priceEl = item.querySelector('.price .woocommerce-Price-amount');
           const linkEl = item.querySelector('a.product-image-link');
           const imgEl = item.querySelector('img');
+          const categoryEl = item.querySelector('.product-categories');
 
           if (!titleEl || !priceEl || !linkEl) {
             console.log('[TelefonikaScraper Browser] Missing required elements');
@@ -85,15 +141,9 @@ export class TelefonikaScraper implements Scraper {
           const title = titleEl.textContent?.trim() || '';
           const priceText = priceEl.textContent?.replace(/[^0-9.]/g, '') || '';
           const price = parseFloat(priceText);
-          const productUrl = linkEl.href;
+          const productUrl = linkEl.href || '';
           const imageUrl = imgEl?.getAttribute('data-src') || imgEl?.src || '';
-
-          console.log('[TelefonikaScraper Browser] Processing product:', {
-            title: title.substring(0, 50),
-            price,
-            hasUrl: !!productUrl,
-            hasImage: !!imageUrl
-          });
+          const category = categoryEl?.textContent?.trim() || '';
 
           if (!title || !price || !productUrl) return null;
           if (minBudget && price < minBudget) return null;
@@ -104,7 +154,8 @@ export class TelefonikaScraper implements Scraper {
             price,
             priceFormatted: priceEl.textContent?.trim() || '',
             productUrl,
-            imageUrl: imageUrl || '/placeholder.png'
+            imageUrl: imageUrl || '/placeholder.png',
+            category
           };
         } catch (error) {
           console.error('[TelefonikaScraper Browser] Error processing item:', error);
@@ -112,9 +163,6 @@ export class TelefonikaScraper implements Scraper {
         }
       }).filter(Boolean);
     }, minBudget, maxBudget);
-
-    console.log(`[TelefonikaScraper] Found ${rawProducts.length} valid products`);
-    return rawProducts;
   }
 
   async scrape(request: SearchRequest): Promise<ScrapingResult> {
@@ -151,65 +199,72 @@ export class TelefonikaScraper implements Scraper {
           throw new Error(`Failed to load page: ${response?.status()} ${response?.statusText()}`);
         }
 
-        // Add a small delay to ensure dynamic content is loaded
-        await this.delay(2000);
-
         const rawProducts = await this.getSearchResults(page, minBudget, maxBudget);
         
+        // Process and filter products
+        const products = rawProducts
+          .map(item => {
+            const category = this.detectCategory(item.title, query);
+            const relevancyScore = this.calculateRelevancyScore(item.title, query, category);
+            
+            if (relevancyScore < 0.3) return null;
+
+            return {
+              id: `telefonika-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              title: item.title,
+              price: item.price,
+              currency: this.currency,
+              productUrl: item.productUrl,
+              imageUrl: item.imageUrl,
+              store: this.name,
+              rating: null,
+              reviews: null,
+              availability: true,
+              metadata: {
+                relevancyScore,
+                searchQuery: query,
+                category: item.category
+              }
+            };
+          })
+          .filter((product): product is Product => product !== null)
+          .sort((a, b) => (b.metadata?.relevancyScore || 0) - (a.metadata?.relevancyScore || 0));
+
         await browser.close();
         browser = null;
 
-        if (rawProducts.length === 0) {
-          console.log('[TelefonikaScraper] No products found');
-          return { success: true, products: [], error: null };
-        }
-
-        // Process and filter products
-        const products = rawProducts
-          .map(item => ({
-            id: `telefonika-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            title: item.title,
-            price: item.price,
-            currency: this.currency,
-            productUrl: item.productUrl,
-            imageUrl: item.imageUrl,
-            store: this.name,
-            rating: null,
-            reviews: null,
-            availability: true,
-            metadata: {
-              originalPrice: item.priceFormatted,
-              relevancyScore: this.calculateRelevancyScore(item.title, query)
-            }
-          }))
-          .filter(product => {
-            const score = product.metadata.relevancyScore;
-            return score >= 0.5; // Only keep products with at least 50% relevancy
-          })
-          .sort((a, b) => (b.metadata.relevancyScore || 0) - (a.metadata.relevancyScore || 0));
-
-        console.log(`[TelefonikaScraper] Successfully processed ${products.length} products`);
-        return { success: true, products, error: null };
+        return {
+          success: true,
+          products,
+          error: null
+        };
 
       } catch (error) {
-        console.error(`[TelefonikaScraper] Error during attempt ${retryCount + 1}:`, error);
+        console.error(`[TelefonikaScraper] Error during scraping (attempt ${retryCount + 1}):`, error);
+        retryCount++;
+        
         if (browser) {
           await browser.close();
           browser = null;
         }
-        
-        retryCount++;
-        if (retryCount < this.maxRetries) {
-          console.log(`[TelefonikaScraper] Retrying... (${retryCount}/${this.maxRetries})`);
-          await this.delay(2000 * retryCount); // Exponential backoff
+
+        if (retryCount === this.maxRetries) {
+          return {
+            success: false,
+            products: [],
+            error: `Failed after ${this.maxRetries} attempts: ${error.message}`
+          };
         }
+
+        // Exponential backoff
+        await this.delay(Math.pow(2, retryCount) * 1000);
       }
     }
 
-    return { 
-      success: false, 
-      products: [], 
-      error: `Failed after ${this.maxRetries} attempts` 
+    return {
+      success: false,
+      products: [],
+      error: 'Unknown error occurred'
     };
   }
 }
