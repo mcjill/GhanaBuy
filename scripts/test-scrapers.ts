@@ -6,7 +6,7 @@ async function testScrapers() {
 
   try {
     console.log('Testing Jumia scraper...');
-    const jumiaResults = await scrapeJumia(query);
+    const jumiaResults = await scrapeJumia({ query });
     console.log(`Found ${jumiaResults.products.length} products from Jumia:`);
     jumiaResults.products.forEach(product => {
       console.log(`- ${product.title} - GHS ${product.price}`);
@@ -14,7 +14,7 @@ async function testScrapers() {
     console.log('\n');
 
     console.log('Testing CompuGhana scraper...');
-    const compuGhanaResults = await scrapeCompuGhana(query);
+    const compuGhanaResults = await scrapeCompuGhana({ query });
     console.log(`Found ${compuGhanaResults.products.length} products from CompuGhana:`);
     compuGhanaResults.products.forEach(product => {
       console.log(`- ${product.title} - GHS ${product.price}`);
@@ -22,7 +22,7 @@ async function testScrapers() {
     console.log('\n');
 
     console.log('Testing Telefonika scraper...');
-    const telefonikaResults = await scrapeTelefonika(query);
+    const telefonikaResults = await scrapeTelefonika({ query });
     console.log(`Found ${telefonikaResults.products.length} products from Telefonika:`);
     telefonikaResults.products.forEach(product => {
       console.log(`- ${product.title} - GHS ${product.price}`);
@@ -30,7 +30,7 @@ async function testScrapers() {
     console.log('\n');
 
     console.log('Testing Jiji scraper...');
-    const jijiResults = await scrapeJiji(query);
+    const jijiResults = await scrapeJiji({ query });
     console.log(`Found ${jijiResults.products.length} products from Jiji:`);
     jijiResults.products.forEach(product => {
       console.log(`- ${product.title} - GHS ${product.price}`);

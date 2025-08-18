@@ -265,7 +265,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Normalize store names
-    const normalizedStores = stores.map(store => STORE_MAP[store] || store);
+    const normalizedStores = (stores as string[]).map(
+      (store) => STORE_MAP[store as keyof typeof STORE_MAP] || store
+    );
     console.log(`[Search API] Normalized stores:`, normalizedStores);
 
     // Map store names to scrapers
@@ -279,15 +281,15 @@ export async function POST(request: NextRequest) {
     // Run selected scrapers in parallel
     const selectedScrapers = normalizedStores
       .filter(store => {
-        const hasStore = !!scraperMap[store];
+        const hasStore = !!scraperMap[store as keyof typeof scraperMap];
         if (!hasStore) {
           console.warn(`[Search API] No scraper found for store: ${store}`);
         }
         return hasStore;
       })
-      .map(store => ({
+      .map((store) => ({
         name: store,
-        scraper: scraperMap[store]
+        scraper: scraperMap[store as keyof typeof scraperMap]
       }));
 
     console.log(`[Search API] Running scrapers for stores:`, stores);

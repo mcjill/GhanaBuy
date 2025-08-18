@@ -59,7 +59,7 @@ export abstract class BaseScraper {
   }
 
   protected processProducts(products: Product[], request: SearchRequest): Product[] {
-    let processedProducts = products
+    let processedProducts: Product[] = products
       .map(product => ({
         ...product,
         metadata: {
@@ -88,7 +88,8 @@ export abstract class BaseScraper {
     return 1;
   }
 
-  async scrape(query: string, request: SearchRequest): Promise<ScrapingResult> {
+  async scrape(request: SearchRequest): Promise<ScrapingResult> {
+    const { query } = request;
     try {
       const searchUrl = this.getSearchUrl(query);
       console.log(`Scraping ${this.store} with URL: ${searchUrl}`);
