@@ -36,6 +36,14 @@
       "outputDirectory": ".next"
     }
     ```
+=======
+     "rewrites": [
+       { "source": "/(.*)", "destination": "/" }
+     ],
+     "buildCommand": "npm run build",
+     "outputDirectory": "dist"
+   }
+   ```
 
 3. Visit [Vercel](https://vercel.com)
 4. Import your repository
