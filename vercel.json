@@ -1,37 +1,10 @@
 {
-  "version": 2,
-  "buildCommand": "npm run build",
-  "devCommand": "npm run dev",
-  "installCommand": "npm install",
-  "framework": "nextjs",
-  "regions": ["fra1"],
-  "env": {
-    "NEXT_PUBLIC_APP_URL": "WILL_BE_SET_BY_VERCEL",
-    "EXCHANGE_RATE_API_KEY": "WILL_BE_SET_BY_VERCEL"
-  },
-  "functions": {
-    "src/app/api/**/*.ts": {
-      "memory": 1024,
-      "maxDuration": 10
-    }
-  },
-  "headers": [
+  "rewrites": [
     {
-      "source": "/api/(.*)",
-      "headers": [
-        {
-          "key": "Access-Control-Allow-Origin",
-          "value": "*"
-        },
-        {
-          "key": "Access-Control-Allow-Methods",
-          "value": "GET, POST, PUT, DELETE, OPTIONS"
-        },
-        {
-          "key": "Access-Control-Allow-Headers",
-          "value": "X-Requested-With, Content-Type, Accept"
-        }
-      ]
+      "source": "/(.*)",
+      "destination": "/"
     }
-  ]
+  ],
+  "buildCommand": "npm run build",
+  "outputDirectory": ".next"
 }

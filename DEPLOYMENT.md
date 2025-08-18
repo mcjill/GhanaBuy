@@ -24,10 +24,24 @@
 
 ### 1. Initial Deployment to Vercel
 1. Push your code to GitHub
-2. Visit [Vercel](https://vercel.com)
-3. Import your repository
-4. Configure environment variables
-5. Deploy
+2. Create `vercel.json` in the project root with a catch-all rewrite so client-side
+   routing works after refreshing routes:
+
+   ```json
+   {
+      "rewrites": [
+        { "source": "/(.*)", "destination": "/" }
+      ],
+      "buildCommand": "npm run build",
+      "outputDirectory": ".next"
+    }
+    ```
+
+3. Visit [Vercel](https://vercel.com)
+4. Import your repository
+5. In Project Settings choose the **Node.js** framework preset
+6. Configure environment variables
+7. Deploy
 
 ### 2. Custom Domain Setup (Optional)
 1. Add your domain in Vercel

@@ -53,12 +53,13 @@ export function PriceChart({ searchResults, selectedCurrency }: PriceChartProps)
       y: {
         beginAtZero: true,
         ticks: {
-          callback: (value: number) => {
+          callback: (value: string | number) => {
+            const numeric = typeof value === 'number' ? value : Number(value);
             return new Intl.NumberFormat('en-US', {
               style: 'currency',
               currency: selectedCurrency,
               maximumFractionDigits: 0,
-            }).format(value);
+            }).format(numeric);
           },
         },
       },
