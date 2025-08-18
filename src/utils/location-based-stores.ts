@@ -168,7 +168,9 @@ export const globalStores: Store[] = [
 ];
 
 export function getLocationBasedStores(countryCode: string): Store[] {
-  const countryStores = storesByCountry[countryCode]?.localStores || [];
+  // Normalize the country code so lookups are case-insensitive
+  const normalizedCode = countryCode.toUpperCase();
+  const countryStores = storesByCountry[normalizedCode]?.localStores || [];
   return [...countryStores, ...globalStores].sort((a, b) => a.priority - b.priority);
 }
 
