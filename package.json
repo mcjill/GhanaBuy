@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
-    "test": "jest",
+    "test": "node --test test/basic.test.js",
     "format": "prettier --write .",
     "prepare-release": "npm run lint && npm run type-check && npm run test && npm run build",
     "test-jiji": "ts-node scripts/test-jiji.ts",

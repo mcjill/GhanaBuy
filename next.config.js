@@ -1,7 +1,16 @@
 /** @type {import('next').NextConfig} */
+// Only use a base path when building for GitHub Pages. Vercel sets the
+// `VERCEL` environment variable during builds, so we can detect that and avoid
+// prefixing all routes (which would otherwise cause 404s on Vercel).
+const basePath = process.env.VERCEL
+  ? ''
+  : process.env.NODE_ENV === 'production'
+    ? '/Can-I-Buy'
+    : '';
+
 const nextConfig = {
   // Remove output: 'export' to enable API routes
-  basePath: process.env.NODE_ENV === 'production' ? '/Can-I-Buy' : '',
+  basePath,
   images: {
     unoptimized: true,
     remotePatterns: [

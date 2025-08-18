@@ -40,10 +40,10 @@ async function testAllScrapers() {
     const startTime = Date.now();
     
     try {
-      const results = await scraper.scrape({ 
+      const results = await scraper.scrape({
         query: SEARCH_QUERY,
-        budget: 100000000,
-        currency: 'GHS'
+        minBudget: 0,
+        maxBudget: 100000000
       });
       
       await displayResults(results, storeName);

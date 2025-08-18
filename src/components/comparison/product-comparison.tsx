@@ -111,7 +111,10 @@ export function ProductComparison({ initialQuery = '' }: ComparisonProps) {
 
       console.log('[ProductComparison] Sending search request:', {
         query: query.trim(),
-        stores: selectedStore === 'all' ? STORES : [STORE_MAP[selectedStore] || selectedStore],
+        stores:
+          selectedStore === 'all'
+            ? STORES
+            : [STORE_MAP[selectedStore as keyof typeof STORE_MAP] || selectedStore],
         minBudget: minBudget ? parseFloat(minBudget) : undefined,
         maxBudget: maxBudget ? parseFloat(maxBudget) : undefined,
       });
@@ -123,7 +126,10 @@ export function ProductComparison({ initialQuery = '' }: ComparisonProps) {
         },
         body: JSON.stringify({
           query: query.trim(),
-          stores: selectedStore === 'all' ? STORES : [STORE_MAP[selectedStore] || selectedStore],
+          stores:
+            selectedStore === 'all'
+              ? STORES
+              : [STORE_MAP[selectedStore as keyof typeof STORE_MAP] || selectedStore],
           minBudget: minBudget ? parseFloat(minBudget) : undefined,
           maxBudget: maxBudget ? parseFloat(maxBudget) : undefined,
         }),
@@ -151,7 +157,7 @@ export function ProductComparison({ initialQuery = '' }: ComparisonProps) {
       // Deduplicate products
       const uniqueProducts = deduplicateProducts(allProducts.map(product => ({
         ...product,
-        store: STORE_MAP[product.store] || product.store
+        store: STORE_MAP[product.store as keyof typeof STORE_MAP] || product.store
       })));
       console.log('[ProductComparison] After deduplication:', uniqueProducts.length);
 
@@ -168,14 +174,15 @@ export function ProductComparison({ initialQuery = '' }: ComparisonProps) {
       console.log('[ProductComparison] Final sorted products:', sortedProducts.length);
       setProducts(sortedProducts);
     } catch (err) {
-      if (err.name === 'AbortError') {
+      if (err instanceof Error && err.name === 'AbortError') {
         console.log('Search cancelled');
         return;
       }
-      setError(err instanceof Error ? err.message : 'An error occurred while fetching products');
+      const message = err instanceof Error ? err.message : 'An error occurred while fetching products';
+      setError(message);
       toast({
         title: "Error",
-        description: err instanceof Error ? err.message : 'An error occurred while fetching products',
+        description: message,
         variant: "destructive"
       });
     } finally {
@@ -242,13 +249,16 @@ export function ProductComparison({ initialQuery = '' }: ComparisonProps) {
   };
 
   const filteredProducts = products.filter(product => {
-    const shouldInclude = selectedStore === 'all' || product.store === STORE_MAP[selectedStore] || product.store === selectedStore;
+    const shouldInclude =
+      selectedStore === 'all' ||
+      product.store === STORE_MAP[selectedStore as keyof typeof STORE_MAP] ||
+      product.store === selectedStore;
     if (!shouldInclude) {
       console.log('[ProductComparison] Filtering out product:', { 
         title: product.title, 
         store: product.store,
         selectedStore,
-        storeMap: STORE_MAP[selectedStore]
+        storeMap: STORE_MAP[selectedStore as keyof typeof STORE_MAP]
       });
     }
     return shouldInclude;

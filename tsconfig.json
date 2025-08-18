@@ -39,6 +39,11 @@
     "node_modules/@types/puppeteer/index.d.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "scripts",
+    "test",
+    "src/test",
+    "src/lib/scrapers",
+    "src/test-scraper.ts"
   ]
 }
