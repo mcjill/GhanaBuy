@@ -104,7 +104,7 @@ export async function scrapeJumia({ query, minBudget, maxBudget }: SearchRequest
         const priceText = $(element).find('div.prc').text().trim();
         const price = parseFloat(priceText.replace(/[^0-9.]/g, ''));
         const productUrl = 'https://www.jumia.com.gh' + ($(element).find('a.core').attr('href') || '');
-        const imageUrl = $(element).find('img.img').data('src') || '';
+        const imageUrl = ($(element).find('img.img').data('src') as string) || '';
 
         console.log('Found Jumia product:', { title, price, productUrl, imageUrl });
 
