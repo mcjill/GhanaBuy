@@ -17,11 +17,19 @@ Check out the live demo at [https://mcjill.github.io/Can-I-Buy](https://mcjill.g
 
 ## 🔍 Supported E-commerce Platforms
 
-Currently, we support price comparison across these Ghanaian e-commerce platforms:
+Currently, we support price comparison across these e-commerce platforms:
 
+- AliExpress
+- Amazon
+- eBay
 - CompuGhana
+- Franko Trading
+- Jiji
+- Jumia
 - Telefonika
-- More platforms coming soon!
+- X (Twitter)
+
+Additional platforms may be added in the future.
 
 ## 🤖 Smart Scraping Features
 
