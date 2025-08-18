@@ -29,6 +29,14 @@
 
    ```json
    {
+      "rewrites": [
+        { "source": "/(.*)", "destination": "/" }
+      ],
+      "buildCommand": "npm run build",
+      "outputDirectory": ".next"
+    }
+    ```
+=======
      "rewrites": [
        { "source": "/(.*)", "destination": "/" }
      ],
