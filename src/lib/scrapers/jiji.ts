@@ -66,17 +66,57 @@ class JijiHTTPScraper implements Scraper {
       console.log(`[Jiji HTTP] Category matched: ${category} -> ${category ? categoryMap[category] : 'none'}`);
 
       // Make HTTP request with proper headers
-      const response = await axios.get(searchUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.5',
-          'Accept-Encoding': 'gzip, deflate, br',
-          'Connection': 'keep-alive',
-          'Upgrade-Insecure-Requests': '1'
-        },
-        timeout: 10000
-      });
+      const headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+        'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+        'Sec-Ch-Ua-Mobile': '?0',
+        'Sec-Ch-Ua-Platform': '"Windows"',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-User': '?1',
+        'Upgrade-Insecure-Requests': '1',
+        'Referer': 'https://www.google.com/'
+      };
+
+      // Try with different approaches for production
+      let response;
+      try {
+        response = await axios.get(searchUrl, {
+          headers,
+          timeout: 8000,
+          maxRedirects: 3,
+          validateStatus: (status) => status < 500
+        });
+      } catch (error: any) {
+        if (error.response?.status === 403) {
+          console.log(`[Jiji HTTP] 403 blocked, trying alternative approach...`);
+          // Try with minimal headers
+          response = await axios.get(searchUrl, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)'
+            },
+            timeout: 8000
+          });
+        } else {
+          throw error;
+        }
+      }
+
+      // Check response status
+      if (response.status === 403) {
+        console.error(`[Jiji HTTP] 403 Forbidden - site is blocking requests`);
+        return {
+          success: false,
+          products: [],
+          error: 'Jiji is blocking automated requests (403 Forbidden)'
+        };
+      }
 
       const $ = cheerio.load(response.data);
       const products: Product[] = [];
