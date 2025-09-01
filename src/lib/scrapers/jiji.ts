@@ -281,18 +281,18 @@ class JijiHTTPScraper implements Scraper {
         products: filteredProducts,
         error: null
       };
-
     } catch (error) {
-      console.error('[Jiji HTTP] Scraping error:', error);
-      console.error('[Jiji HTTP] Error details:', {
+      console.error('❌ [Jiji] Scraping failed:', error);
+      console.error('❌ [Jiji] Error details:', {
         message: error instanceof Error ? error.message : 'Unknown error',
         stack: error instanceof Error ? error.stack : undefined,
-        query: query
+        query,
+        url: `https://jiji.com.gh/search?query=${encodeURIComponent(query)}`
       });
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
-        products: []
+        products: [],
+        error: `Failed to scrape Jiji: ${error instanceof Error ? error.message : 'Unknown error'}`
       };
     }
   }

@@ -22,33 +22,38 @@ export async function scrapeAllSources(query: string, minBudget?: number, maxBud
     console.log(`[Scrapers] Starting parallel scraping for query: ${query}`);
     console.log(`[Scrapers] Price range: ${minBudget || 0} - ${maxBudget || 'unlimited'} GHS`);
     
-    // Run scrapers in parallel with 8-second timeout each for faster response
-    const results = await Promise.allSettled([
-      withTimeout(jijiScraper.scrape({ query, minBudget, maxBudget }), 8000),
-      withTimeout(scrapeCompuGhana({ query, minBudget, maxBudget }), 8000),
-      withTimeout(scrapeJumia({ query, minBudget, maxBudget }), 8000),
-      withTimeout(scrapeTelefonika({ query, minBudget, maxBudget }), 8000),
-      withTimeout(scrapeAmazon({ query, minBudget, maxBudget }), 8000),
-    ]);
+    console.log(`[Scraper] Starting search for "${query}" with budget ${minBudget || 0} - ${maxBudget || 'unlimited'} GHS`);
+    
+    const scraperPromises = [
+      { name: 'Jiji', promise: withTimeout(jijiScraper.scrape({ query, minBudget, maxBudget }), 8000) },
+      { name: 'CompuGhana', promise: withTimeout(scrapeCompuGhana({ query, minBudget, maxBudget }), 8000) },
+      { name: 'Jumia', promise: withTimeout(scrapeJumia({ query, minBudget, maxBudget }), 8000) },
+      { name: 'Telefonika', promise: withTimeout(scrapeTelefonika({ query, minBudget, maxBudget }), 8000) },
+      { name: 'Amazon', promise: withTimeout(scrapeAmazon({ query, minBudget, maxBudget }), 8000) },
+    ];
+    
+    const results = await Promise.allSettled(scraperPromises.map(s => s.promise));
 
     const products: Product[] = [];
     const errors: string[] = [];
 
     results.forEach((result, index) => {
+      const scraperName = scraperPromises[index].name;
       if (result.status === 'fulfilled') {
         const source = result.value;
         if (source.products && source.products.length > 0) {
-          console.log(`[Scrapers] Successfully scraped ${source.products.length} products from ${STORE_NAMES[index]}`);
+          console.log(`[Scrapers] ✅ ${scraperName}: ${source.products.length} products`);
           products.push(...source.products);
         } else {
-          console.log(`[Scrapers] No products found from ${STORE_NAMES[index]}`);
+          console.log(`[Scrapers] ⚠️ ${scraperName}: No products found`);
         }
         if (source.error) {
-          errors.push(`${STORE_NAMES[index]}: ${source.error}`);
+          console.error(`[Scrapers] ❌ ${scraperName} error: ${source.error}`);
+          errors.push(`${scraperName}: ${source.error}`);
         }
       } else {
-        console.error(`[Scrapers] Failed to scrape ${STORE_NAMES[index]}:`, result.reason);
-        errors.push(`${STORE_NAMES[index]}: ${result.reason.toString()}`);
+        console.error(`[Scrapers] ❌ ${scraperName} failed:`, result.reason);
+        errors.push(`${scraperName}: ${result.reason.toString()}`);
       }
     });
 

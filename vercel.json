@@ -7,6 +7,4 @@
   ],
   "buildCommand": "npm run build",
   "outputDirectory": ".next"
-=======
-  "outputDirectory": "dist"
 }
