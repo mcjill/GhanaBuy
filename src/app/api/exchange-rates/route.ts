@@ -20,7 +20,18 @@ const CACHE: { [key: string]: { rate: number; timestamp: number } } = {};
 const CACHE_DURATION = 3600000; // 1 hour in milliseconds
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
+  let searchParams;
+  try {
+    // Validate request.url before constructing URL
+    if (!request.url || typeof request.url !== 'string') {
+      throw new Error('Request URL is missing or invalid');
+    }
+    searchParams = new URL(request.url).searchParams;
+  } catch (error) {
+    console.error('Invalid URL in request:', request.url, error);
+    return NextResponse.json({ error: 'Invalid request URL' }, { status: 400 });
+  }
+  
   const from = searchParams.get('from')?.toUpperCase();
   const to = searchParams.get('to')?.toUpperCase();
 

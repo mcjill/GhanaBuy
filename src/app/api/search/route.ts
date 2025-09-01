@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Product } from '@/lib/scrapers/types';
 import { compuGhanaScraper } from '@/lib/scrapers/compughana';
-import { jumiaScraper } from '@/lib/scrapers/jumia';
 import { jijiScraper } from '@/lib/scrapers/jiji';
+import { jumiaScraper } from '@/lib/scrapers/jumia';
 import { telefonikaScraper } from '@/lib/scrapers/telefonika';
-import { frankoScraper } from '@/lib/scrapers/franko';
-import { Product, ScrapingResult } from '@/lib/scrapers/types';
 
 const MIN_RELEVANCY_SCORE = 0.2; // Lowered from 0.3 to allow more products
 const HIGH_RELEVANCY_THRESHOLD = 0.6; // Lowered from 0.7 to allow more products in high relevancy
@@ -46,6 +45,31 @@ const STORE_MAP = {
 };
 
 function sanitizeProduct(product: Product, query: string): SanitizedProduct {
+  // Validate and sanitize URLs
+  let validProductUrl = product.productUrl;
+  try {
+    if (product.productUrl && typeof product.productUrl === 'string') {
+      new URL(product.productUrl);
+    } else {
+      validProductUrl = '#';
+    }
+  } catch {
+    console.warn('[Search API] Invalid productUrl detected:', product.productUrl);
+    validProductUrl = '#';
+  }
+
+  let validImageUrl = product.imageUrl;
+  try {
+    if (product.imageUrl && typeof product.imageUrl === 'string' && product.imageUrl.startsWith('http')) {
+      new URL(product.imageUrl);
+    } else if (!product.imageUrl || !product.imageUrl.startsWith('http')) {
+      validImageUrl = '';
+    }
+  } catch {
+    console.warn('[Search API] Invalid imageUrl detected:', product.imageUrl);
+    validImageUrl = '';
+  }
+
   const title = product.title.toLowerCase();
   const searchTerms = query.toLowerCase().split(' ');
   
@@ -92,8 +116,8 @@ function sanitizeProduct(product: Product, query: string): SanitizedProduct {
     title: product.title,
     price: product.price,
     currency: product.currency,
-    productUrl: product.productUrl,
-    imageUrl: product.imageUrl,
+    productUrl: validProductUrl,
+    imageUrl: validImageUrl,
     store: product.store,
     rating: product.rating,
     reviews: product.reviews,
@@ -258,7 +282,7 @@ function filterAndSortProducts(products: Product[], query: string, minBudget?: n
 export async function POST(request: NextRequest) {
   try {
     const data = await request.json();
-    const { query, minBudget, maxBudget, stores = ['Jumia', 'Jiji', 'CompuGhana'] } = data;
+    const { query, minBudget, maxBudget, stores = ['Jumia', 'Jiji', 'CompuGhana', 'Telefonika'] } = data;
 
     if (!query) {
       return NextResponse.json({ error: 'Query is required' }, { status: 400 });

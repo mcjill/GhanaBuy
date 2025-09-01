@@ -5,13 +5,16 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 
 interface Product {
+  id: string;
   title: string;
   price: number;
   currency: string;
-  url: string;
-  image: string;
+  productUrl: string;
+  imageUrl: string;
   store: string;
   availability: boolean;
+  rating?: number;
+  reviews?: number;
 }
 
 export default function SearchPage() {
@@ -23,6 +26,9 @@ export default function SearchPage() {
   const [searchResults, setSearchResults] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [loadingMessage, setLoadingMessage] = useState('');
+  const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,28 +39,42 @@ export default function SearchPage() {
     setSearchResults([]); // Clear previous results
     
     try {
-      const response = await fetch('/api/scrape', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: searchQuery }),
+      setLoadingMessage('Searching across stores...');
+      setLoadingProgress(10);
+      
+      const response = await fetch(`/api/search-products?q=${encodeURIComponent(searchQuery)}`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
       });
+
+      setLoadingProgress(90);
+      setLoadingMessage('Processing results...');
 
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Failed to fetch results');
       
-      setSearchResults(data.results);
+      setSearchResults(data.products || []);
+      setLoadingProgress(100);
       
       // Update URL without triggering a full page reload
-      const params = new URLSearchParams(window.location.search);
-      params.set('q', searchQuery);
-      router.push(`/search?${params.toString()}`, { 
-        scroll: false
-      });
+      try {
+        const params = new URLSearchParams(window.location.search);
+        params.set('q', searchQuery);
+        router.push(`/search?${params.toString()}`, { 
+          scroll: false
+        });
+      } catch (error) {
+        console.error('Error updating URL parameters:', error);
+        // Fallback to simple query parameter
+        router.push(`/search?q=${encodeURIComponent(searchQuery)}`);
+      }
     } catch (err) {
       setError('An error occurred while searching. Please try again.');
       console.error(err);
     } finally {
       setIsLoading(false);
+      setLoadingProgress(0);
+      setLoadingMessage('');
     }
   };
 
@@ -110,7 +130,14 @@ export default function SearchPage() {
         {isLoading ? (
           <div className="text-center py-12">
             <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent"></div>
-            <p className="mt-4 text-gray-600">Searching across multiple stores...</p>
+            <p className="mt-4 text-gray-600">{loadingMessage}</p>
+            <div className="w-64 bg-gray-200 rounded-full h-2 mx-auto mt-4">
+              <div 
+                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                style={{ width: `${loadingProgress}%` }}
+              ></div>
+            </div>
+            <p className="mt-2 text-sm text-gray-500">{loadingProgress}% complete</p>
           </div>
         ) : searchResults.length > 0 ? (
           <div>
@@ -122,15 +149,15 @@ export default function SearchPage() {
                   className="bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200"
                 >
                   <a
-                    href={product.url}
+                    href={product.productUrl && product.productUrl.startsWith('http') ? product.productUrl : '#'}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="block p-4"
                   >
                     <div className="relative h-48 mb-4">
-                      {product.image ? (
+                      {product.imageUrl ? (
                         <Image
-                          src={product.image}
+                          src={product.imageUrl}
                           alt={product.title}
                           fill
                           className="object-contain"
@@ -148,9 +175,24 @@ export default function SearchPage() {
                       <span className="text-xl font-semibold text-blue-600">
                         {product.currency} {product.price.toLocaleString()}
                       </span>
-                      <span className="text-sm text-gray-500">
-                        {product.store}
-                      </span>
+                      <div className="flex flex-col items-end">
+                        <span className="text-sm text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                          {product.store}
+                        </span>
+                        {product.rating && product.rating > 0 && (
+                          <div className="flex items-center mt-1">
+                            <span className="text-yellow-400 text-sm">★</span>
+                            <span className="ml-1 text-xs text-gray-600">
+                              {product.rating.toFixed(1)}
+                            </span>
+                            {product.reviews && product.reviews > 0 && (
+                              <span className="ml-1 text-xs text-gray-400">
+                                ({product.reviews})
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </a>
                 </div>

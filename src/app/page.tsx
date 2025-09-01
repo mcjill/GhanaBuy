@@ -46,7 +46,13 @@ export default function Home() {
     setFeedbackStatus('sending');
 
     const mailtoLink = `mailto:elliotbrenyasarfo@gmail.com?subject=Can I Buy Feedback&body=${encodeURIComponent(feedbackMessage)}`;
-    window.location.href = mailtoLink;
+    try {
+      window.location.href = mailtoLink;
+    } catch (error) {
+      console.error('Error opening email client:', error);
+      // Fallback: copy email to clipboard or show error
+      navigator.clipboard?.writeText(`elliotbrenyasarfo@gmail.com - ${feedbackMessage}`);
+    }
     
     // Reset form
     setFeedbackEmail('');
@@ -147,12 +153,31 @@ export default function Home() {
             Make confident purchase decisions with real-time price comparisons across multiple stores.
           </p>
 
+          {/* Quick Search */}
+          <form onSubmit={handleSearch} className="max-w-2xl mx-auto mb-8">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search for products (e.g., iPhone, Samsung, laptop)..."
+                className="flex-1 px-6 py-4 text-lg border-2 border-gray-200 rounded-full focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
+              />
+              <button
+                type="submit"
+                className="px-8 py-4 bg-blue-600 text-white rounded-full hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-semibold"
+              >
+                Search
+              </button>
+            </div>
+          </form>
+
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link 
               href="/compare" 
               className="btn-primary px-8 py-3 text-lg"
             >
-              Start Searching
+              Advanced Search
             </Link>
             <Link 
               href="/analyze" 

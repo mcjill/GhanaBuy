@@ -29,7 +29,7 @@ export default function BlogPage() {
       <div className="container-apple mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
           {blogPosts.map((post, index) => (
-            <Link href={`/blog/${post.slug}`} key={post.id}>
+            <Link href={post.slug ? `/blog/${post.slug}` : '#'} key={post.id}>
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}

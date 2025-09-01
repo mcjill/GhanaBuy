@@ -58,7 +58,7 @@ export class AmazonScraper {
                 title,
                 price,
                 currency: 'USD',
-                productUrl: productUrl.startsWith('http') ? productUrl : `${window.location.origin}${productUrl}`,
+                productUrl: productUrl.startsWith('http') ? productUrl : `https://www.amazon.com${productUrl}`,
                 imageUrl,
                 store: 'Amazon',
                 rating,

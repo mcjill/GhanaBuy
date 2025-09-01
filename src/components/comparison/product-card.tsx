@@ -10,6 +10,20 @@ interface ProductCardProps {
 }
 
 export function ProductCard({ product }: ProductCardProps) {
+  // Validate and sanitize product URL
+  const getValidUrl = (url: string): string => {
+    if (!url || typeof url !== 'string') return '#';
+    
+    try {
+      // Test if URL is valid
+      new URL(url);
+      return url;
+    } catch {
+      // If URL is invalid, return fallback
+      return '#';
+    }
+  };
+
   const getStoreStyles = (store: string) => {
     const storeName = store.toLowerCase();
     if (storeName.includes('jiji')) {
@@ -57,7 +71,7 @@ export function ProductCard({ product }: ProductCardProps) {
       className="group"
     >
       <Card className="overflow-hidden bg-white transition-all duration-300 hover:shadow-lg">
-        <Link href={product.productUrl} target="_blank" rel="noopener noreferrer" className="block">
+        <Link href={getValidUrl(product.productUrl)} target="_blank" rel="noopener noreferrer" className="block">
           <div className="relative aspect-[4/3] bg-white p-4">
             <Image
               src={product.imageUrl || '/placeholder.png'}
@@ -101,12 +115,17 @@ export function ProductCard({ product }: ProductCardProps) {
                 )}
               </div>
 
-              {product.rating && (
+              {product.rating && product.rating > 0 && (
                 <div className="flex items-center">
                   <span className="text-yellow-400">★</span>
                   <span className="ml-1 text-sm text-gray-600">
                     {product.rating.toFixed(1)}
                   </span>
+                  {product.reviews && product.reviews > 0 && (
+                    <span className="ml-1 text-xs text-gray-400">
+                      ({product.reviews})
+                    </span>
+                  )}
                 </div>
               )}
             </div>

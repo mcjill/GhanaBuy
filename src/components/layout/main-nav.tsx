@@ -1,13 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useState, useEffect } from 'react';
 import { MobileNav } from './mobile-nav';
 
 export function MainNav() {
   const pathname = usePathname();
+  const router = useRouter();
   const [isScrolled, setIsScrolled] = useState(false);
 
   useEffect(() => {
@@ -27,7 +28,13 @@ export function MainNav() {
     localStorage.removeItem('searchResults');
     
     // Use window.location for hard navigation when needed
-    window.location.href = href;
+    try {
+      window.location.href = href;
+    } catch (error) {
+      console.error('Error navigating to:', href, error);
+      // Fallback to router push for invalid URLs
+      router.push('/');
+    }
   };
 
   const routes = [

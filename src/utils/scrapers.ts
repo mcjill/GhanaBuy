@@ -2,21 +2,33 @@ import type { Product, ScrapingResult, SearchRequest } from '../lib/scrapers/typ
 import * as cheerio from 'cheerio';
 import { retry } from '../lib/utils/retry';
 import { v4 as uuidv4 } from 'uuid';
+import { jijiScraper } from '../lib/scrapers/jiji';
 
 const STORE_NAMES = ['Jiji Ghana', 'CompuGhana', 'Jumia', 'Telefonika', 'Amazon'] as const;
 type StoreName = typeof STORE_NAMES[number];
 
+// Add timeout wrapper for scrapers
+const withTimeout = <T>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => 
+      setTimeout(() => reject(new Error('Scraper timeout')), timeoutMs)
+    )
+  ]);
+};
+
 export async function scrapeAllSources(query: string, minBudget?: number, maxBudget?: number): Promise<ScrapingResult> {
   try {
-    console.log(`[Scrapers] Starting to scrape all sources for query: ${query}`);
+    console.log(`[Scrapers] Starting parallel scraping for query: ${query}`);
     console.log(`[Scrapers] Price range: ${minBudget || 0} - ${maxBudget || 'unlimited'} GHS`);
     
+    // Run scrapers in parallel with 8-second timeout each for faster response
     const results = await Promise.allSettled([
-      scrapeJiji({ query, minBudget, maxBudget }),      // Add Jiji first as it's prioritized
-      scrapeCompuGhana({ query, minBudget, maxBudget }),
-      scrapeJumia({ query, minBudget, maxBudget }),
-      scrapeTelefonika({ query, minBudget, maxBudget }),
-      scrapeAmazon({ query, minBudget, maxBudget }),
+      withTimeout(jijiScraper.scrape({ query, minBudget, maxBudget }), 8000),
+      withTimeout(scrapeCompuGhana({ query, minBudget, maxBudget }), 8000),
+      withTimeout(scrapeJumia({ query, minBudget, maxBudget }), 8000),
+      withTimeout(scrapeTelefonika({ query, minBudget, maxBudget }), 8000),
+      withTimeout(scrapeAmazon({ query, minBudget, maxBudget }), 8000),
     ]);
 
     const products: Product[] = [];
@@ -40,14 +52,31 @@ export async function scrapeAllSources(query: string, minBudget?: number, maxBud
       }
     });
 
-    // Sort products by price
-    products.sort((a, b) => a.price - b.price);
+    // Remove duplicates based on title similarity and price
+    const uniqueProducts = products.filter((product, index, arr) => {
+      return !arr.slice(0, index).some(existingProduct => 
+        existingProduct.title.toLowerCase().includes(product.title.toLowerCase().slice(0, 20)) &&
+        Math.abs(existingProduct.price - product.price) < 100
+      );
+    });
 
-    console.log(`[Scrapers] Total products found across all sources: ${products.length}`);
+    // Sort products by relevance and price
+    uniqueProducts.sort((a, b) => {
+      // Prioritize exact matches and lower prices
+      const aRelevance = (a as any).metadata?.relevancyScore || 0.5;
+      const bRelevance = (b as any).metadata?.relevancyScore || 0.5;
+      
+      if (Math.abs(aRelevance - bRelevance) > 0.1) {
+        return bRelevance - aRelevance; // Higher relevance first
+      }
+      return a.price - b.price; // Then by price
+    });
+
+    console.log(`[Scrapers] Total products: ${products.length}, Unique: ${uniqueProducts.length}`);
     
     return {
-      success: products.length > 0,
-      products,
+      success: uniqueProducts.length > 0,
+      products: uniqueProducts,
       error: errors.length > 0 ? errors.join('; ') : null
     };
   } catch (error) {
@@ -103,7 +132,8 @@ export async function scrapeJumia({ query, minBudget, maxBudget }: SearchRequest
         const title = $(element).find('[data-name]').attr('data-name')?.trim() || '';
         const priceText = $(element).find('div.prc').text().trim();
         const price = parseFloat(priceText.replace(/[^0-9.]/g, ''));
-        const productUrl = 'https://www.jumia.com.gh' + ($(element).find('a.core').attr('href') || '');
+        const href = $(element).find('a.core').attr('href') || '';
+        const productUrl = href ? (href.startsWith('http') ? href : 'https://www.jumia.com.gh' + href) : '';
         const imageUrl = ($(element).find('img.img').data('src') as string) || '';
 
         console.log('Found Jumia product:', { title, price, productUrl, imageUrl });
@@ -243,55 +273,6 @@ export async function scrapeTelefonika({ query, minBudget, maxBudget }: SearchRe
   }
 }
 
-export async function scrapeJiji({ query, minBudget, maxBudget }: SearchRequest): Promise<ScrapingResult> {
-  try {
-    const response = await retry(() => 
-      fetch(`https://jiji.com.gh/search?query=${encodeURIComponent(query)}`, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
-      })
-    );
-    const html = await response.text();
-    const $ = cheerio.load(html);
-    const products: Product[] = [];
-
-    $('.qa-advert-list-item').each((_, element) => {
-      const title = $(element).find('.qa-advert-title').text().trim();
-      const priceText = $(element).find('.qa-advert-price').text().trim();
-      const price = parseFloat(priceText.replace(/[^0-9.]/g, ''));
-      const productUrl = 'https://jiji.com.gh' + ($(element).find('a').attr('href') || '');
-      const imageUrl = $(element).find('img').attr('src') || '';
-
-      if (title && price && productUrl && imageUrl) {
-        products.push({
-          id: uuidv4(),
-          title,
-          price,
-          currency: 'GHS',
-          productUrl,
-          imageUrl,
-          store: 'Jiji Ghana',
-          rating: 0,
-          reviews: 0,
-          availability: true
-        });
-      }
-    });
-
-    return {
-      success: products.length > 0,
-      products,
-      error: null
-    };
-  } catch (error) {
-    return {
-      success: false,
-      products: [],
-      error: error instanceof Error ? error.message : 'Failed to scrape Jiji'
-    };
-  }
-}
 
 export async function scrapeAmazon({ query, minBudget, maxBudget }: SearchRequest): Promise<ScrapingResult> {
   try {
@@ -310,7 +291,8 @@ export async function scrapeAmazon({ query, minBudget, maxBudget }: SearchReques
       const title = $(element).find('h2 span').text().trim();
       const priceText = $(element).find('.a-price-whole').first().text().trim();
       const price = parseFloat(priceText.replace(/[^0-9.]/g, '')) * 12.5; // Convert USD to GHS (approximate)
-      const productUrl = 'https://www.amazon.com' + ($(element).find('a.a-link-normal').attr('href') || '');
+      const href = $(element).find('a.a-link-normal').attr('href') || '';
+      const productUrl = href ? (href.startsWith('http') ? href : 'https://www.amazon.com' + href) : '';
       const imageUrl = $(element).find('img.s-image').attr('src') || '';
       const ratingText = $(element).find('.a-icon-star-small .a-icon-alt').text();
       const rating = parseFloat(ratingText.split(' ')[0]) || 0;

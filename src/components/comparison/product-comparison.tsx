@@ -55,11 +55,20 @@ export function ProductComparison({ initialQuery = '' }: ComparisonProps) {
       setHasSearched(false);
       
       // Clear URL parameters
-      const url = new URL(window.location.href);
-      url.searchParams.delete('q');
-      url.searchParams.delete('min');
-      url.searchParams.delete('max');
-      window.history.replaceState({}, '', url.pathname);
+      try {
+        if (typeof window !== 'undefined' && window.location && window.location.href) {
+          const url = new URL(window.location.href);
+          url.searchParams.delete('q');
+          url.searchParams.delete('min');
+          url.searchParams.delete('max');
+          window.history.replaceState({}, '', url.pathname);
+        }
+      } catch (error) {
+        console.error('Error clearing URL parameters:', error);
+        if (typeof window !== 'undefined') {
+          window.history.replaceState({}, '', '/');
+        }
+      }
     };
 
     window.addEventListener('beforeunload', clearStateAndParams);
@@ -100,11 +109,14 @@ export function ProductComparison({ initialQuery = '' }: ComparisonProps) {
 
     setLoading(true);
     setError(null);
+    setProducts([]); // Clear previous results immediately
     setHasSearched(true);
 
     try {
       const params = new URLSearchParams();
-      params.set('q', query.trim());
+      if (query && query.trim()) {
+        params.set('q', query.trim());
+      }
       if (minBudget) params.set('min', minBudget);
       if (maxBudget) params.set('max', maxBudget);
       router.push(`/compare?${params.toString()}`);
@@ -205,11 +217,20 @@ export function ProductComparison({ initialQuery = '' }: ComparisonProps) {
     setHasSearched(false);
     
     // Clear URL parameters
-    const url = new URL(window.location.href);
-    url.searchParams.delete('q');
-    url.searchParams.delete('min');
-    url.searchParams.delete('max');
-    router.replace(url.pathname);
+    try {
+      if (typeof window !== 'undefined' && window.location && window.location.href) {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('q');
+        url.searchParams.delete('min');
+        url.searchParams.delete('max');
+        router.replace(url.pathname);
+      } else {
+        router.replace('/');
+      }
+    } catch (error) {
+      console.error('Error clearing URL parameters:', error);
+      router.replace('/');
+    }
   };
 
   const deduplicateProducts = (products: Product[]): Product[] => {

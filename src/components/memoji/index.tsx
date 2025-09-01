@@ -46,14 +46,14 @@ export function Memoji({ type, className }: MemojiProps) {
           color2
         )}
       />
-      <Image
-        src={`https://www.tapback.co/api/avatar/${seed}`}
-        alt={`${type} memoji`}
-        width={80}
-        height={80}
-        className="relative z-10"
-        priority
-      />
+      <div className="relative z-10 w-20 h-20 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center text-2xl">
+        {type === 'shopping' && '🛒'}
+        {type === 'thinking' && '🤔'}
+        {type === 'happy' && '😊'}
+        {type === 'excited' && '🤩'}
+        {type === 'winking' && '😉'}
+        {type === 'thumbs-up' && '👍'}
+      </div>
     </div>
   );
 }
