@@ -137,11 +137,13 @@
 
 ## Continuous Integration/Deployment
 
-### GitHub Actions Workflow
-1. Automated tests
-2. Code quality checks
-3. Security scanning
-4. Automated deployment
+### Vercel Build Checks
+The project does not use GitHub Actions. Vercel runs every check as part of its build:
+1. Unit tests (`npm test`)
+2. Type check and lint (run by `next build`)
+3. Production build
+
+A failed check fails the deployment, for both pull request previews and production.
 
 ### Quality Gates
 - Code coverage requirements
