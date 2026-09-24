@@ -45,7 +45,7 @@ export function AnalysisResult({
         <CardHeader>
           <CardTitle>Analysis Result</CardTitle>
           <CardDescription>
-            Based on your financial information, here's what we found
+            Based on your financial information, here&apos;s what we found
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">

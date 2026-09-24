@@ -361,7 +361,7 @@ export default function Home() {
           >
             <h2 className="text-3xl font-bold mb-4">Send Us Feedback</h2>
             <p className="text-gray-600 max-w-2xl mx-auto">
-              We'd love to hear your thoughts on Can I Buy. Your feedback helps us improve!
+              We&apos;d love to hear your thoughts on Can I Buy. Your feedback helps us improve!
             </p>
           </motion.div>
 
