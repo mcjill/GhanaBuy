@@ -96,21 +96,20 @@ npm run dev
 
 ## 🚀 Deployment
 
-### GitHub Pages
+### Vercel
 
-The project is configured for automatic deployment to GitHub Pages. When you push to the `main` branch, GitHub Actions will:
+Vercel deploys the app through its GitHub integration:
 
-1. Build the Next.js application
-2. Export static files
-3. Deploy to GitHub Pages
+- Every pull request gets a preview deployment.
+- Every push to `main` deploys to production.
 
-The deployment process is handled by the workflow in `.github/workflows/deploy.yml`.
+The build command in `vercel.json` is `npm test && npm run build`. A deploy fails when a unit test, the type check, or lint fails, because `next build` runs the type check and lint itself.
 
-To manually trigger a deployment:
+Run the same checks locally before you push:
 
-1. Go to the repository's Actions tab
-2. Select "Deploy to GitHub Pages"
-3. Click "Run workflow"
+```bash
+npm test && npm run build
+```
 
 ### Environment Variables
 
@@ -120,11 +119,7 @@ For local development, create a `.env.local` file with:
 NEXT_PUBLIC_BASE_URL=http://localhost:3000
 ```
 
-For production, set:
-
-```bash
-NEXT_PUBLIC_BASE_URL=https://mcjill.github.io/Can-I-Buy
-```
+For production, set `NEXT_PUBLIC_BASE_URL` to your Vercel domain in the Vercel project settings.
 
 ## 📦 Production Deployment
 
