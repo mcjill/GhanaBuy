@@ -24,6 +24,27 @@ const STORE_MAP = {
 
 const STORES = ['Jumia', 'Jiji', 'CompuGhana', 'Telefonika'];
 
+interface StoreStatus {
+  store: string;
+  ok: boolean;
+  found: number;
+  shown: number;
+  error: string | null;
+}
+
+interface SearchValues {
+  query: string;
+  minBudget: string;
+  maxBudget: string;
+}
+
+function describeStoreStatus(status: StoreStatus): string {
+  if (!status.ok) return `failed: ${status.error || 'unknown error'}`;
+  if (status.found === 0) return 'no results';
+  if (status.shown === status.found) return `${status.found} found`;
+  return `${status.found} found, ${status.shown} shown after filters`;
+}
+
 interface ComparisonProps {
   initialQuery?: string;
 }
@@ -40,6 +61,7 @@ export function ProductComparison({ initialQuery = '' }: ComparisonProps) {
   const [selectedStore, setSelectedStore] = useState<string>('all');
   const [error, setError] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
+  const [storeStatus, setStoreStatus] = useState<StoreStatus[]>([]);
   const abortController = useRef<AbortController | null>(null);
 
   // Clear URL parameters and state on page refresh
@@ -85,14 +107,19 @@ export function ProductComparison({ initialQuery = '' }: ComparisonProps) {
       setQuery(urlQuery);
       if (min) setMinBudget(min);
       if (max) setMaxBudget(max);
-      handleSearch();
+      // Pass the URL values directly: the state set above is not visible
+      // to handleSearch until the next render.
+      handleSearch(undefined, { query: urlQuery, minBudget: min || '', maxBudget: max || '' });
     }
   }, []); // Empty dependency array for first mount only
 
-  const handleSearch = useCallback(async (e?: React.FormEvent) => {
+  const handleSearch = useCallback(async (e?: React.FormEvent, overrides?: SearchValues) => {
     e?.preventDefault();
-    
-    if (!query.trim()) {
+    const searchQuery = overrides?.query ?? query;
+    const searchMin = overrides?.minBudget ?? minBudget;
+    const searchMax = overrides?.maxBudget ?? maxBudget;
+
+    if (!searchQuery.trim()) {
       toast({
         title: "Search query required",
         description: "Please enter a product to search for.",
@@ -110,25 +137,26 @@ export function ProductComparison({ initialQuery = '' }: ComparisonProps) {
     setLoading(true);
     setError(null);
     setProducts([]); // Clear previous results immediately
+    setStoreStatus([]);
     setHasSearched(true);
 
     try {
       const params = new URLSearchParams();
-      if (query && query.trim()) {
-        params.set('q', query.trim());
+      if (searchQuery && searchQuery.trim()) {
+        params.set('q', searchQuery.trim());
       }
-      if (minBudget) params.set('min', minBudget);
-      if (maxBudget) params.set('max', maxBudget);
+      if (searchMin) params.set('min', searchMin);
+      if (searchMax) params.set('max', searchMax);
       router.push(`/compare?${params.toString()}`);
 
       console.log('[ProductComparison] Sending search request:', {
-        query: query.trim(),
+        query: searchQuery.trim(),
         stores:
           selectedStore === 'all'
             ? STORES
             : [STORE_MAP[selectedStore as keyof typeof STORE_MAP] || selectedStore],
-        minBudget: minBudget ? parseFloat(minBudget) : undefined,
-        maxBudget: maxBudget ? parseFloat(maxBudget) : undefined,
+        minBudget: searchMin ? parseFloat(searchMin) : undefined,
+        maxBudget: searchMax ? parseFloat(searchMax) : undefined,
       });
 
       const response = await fetch('/api/search', {
@@ -137,13 +165,13 @@ export function ProductComparison({ initialQuery = '' }: ComparisonProps) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          query: query.trim(),
+          query: searchQuery.trim(),
           stores:
             selectedStore === 'all'
               ? STORES
               : [STORE_MAP[selectedStore as keyof typeof STORE_MAP] || selectedStore],
-          minBudget: minBudget ? parseFloat(minBudget) : undefined,
-          maxBudget: maxBudget ? parseFloat(maxBudget) : undefined,
+          minBudget: searchMin ? parseFloat(searchMin) : undefined,
+          maxBudget: searchMax ? parseFloat(searchMax) : undefined,
         }),
         signal: abortController.current.signal,
       });
@@ -158,6 +186,8 @@ export function ProductComparison({ initialQuery = '' }: ComparisonProps) {
       if (data.error) {
         throw new Error(data.error);
       }
+
+      setStoreStatus(Array.isArray(data.stores) ? data.stores : []);
 
       // Combine and sort all products
       const allProducts = [
@@ -213,6 +243,7 @@ export function ProductComparison({ initialQuery = '' }: ComparisonProps) {
   const clearSearch = () => {
     setQuery('');
     setProducts([]);
+    setStoreStatus([]);
     setError(null);
     setHasSearched(false);
     
@@ -375,6 +406,16 @@ export function ProductComparison({ initialQuery = '' }: ComparisonProps) {
       )}
 
       {loading && <SkeletonLoader />}
+
+      {!loading && storeStatus.length > 0 && (
+        <ul className="mb-4 flex flex-wrap gap-x-4 gap-y-1 text-sm" aria-label="Store results">
+          {storeStatus.map((status) => (
+            <li key={status.store} className={status.ok ? 'text-gray-600' : 'text-red-600'}>
+              <span className="font-medium">{status.store}:</span> {describeStoreStatus(status)}
+            </li>
+          ))}
+        </ul>
+      )}
 
       {!loading && hasSearched && filteredProducts.length === 0 && (
         <div className="text-center p-8 bg-gray-50 rounded-lg">
