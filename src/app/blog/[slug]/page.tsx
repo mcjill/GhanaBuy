@@ -78,15 +78,15 @@ export default function BlogPostPage() {
           <div className="prose prose-lg max-w-none">
             <div className="bg-blue-50 border-l-4 border-blue-500 p-4 mb-8">
               <p className="text-blue-700">
-                This article is coming soon! We're working hard to bring you valuable content about {post.title.toLowerCase()}.
-                Subscribe to our newsletter to be notified when it's published.
+                This article is coming soon! We&apos;re working hard to bring you valuable content about {post.title.toLowerCase()}.
+                Subscribe to our newsletter to be notified when it&apos;s published.
               </p>
             </div>
 
             <h2>What to Expect</h2>
             <p>{post.excerpt}</p>
 
-            <h2>Topics We'll Cover</h2>
+            <h2>Topics We&apos;ll Cover</h2>
             <ul>
               {post.topics.map((topic, index) => (
                 <li key={index}>{topic}</li>
@@ -99,7 +99,7 @@ export default function BlogPostPage() {
                 Get Notified When This Article is Published
               </h3>
               <p className="text-gray-600 mb-6">
-                Be the first to read this article when it's published. We'll send you an email as soon as it's ready.
+                Be the first to read this article when it&apos;s published. We&apos;ll send you an email as soon as it&apos;s ready.
               </p>
               <div className="flex gap-4">
                 <input

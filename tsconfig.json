@@ -43,7 +43,6 @@
     "scripts",
     "test",
     "src/test",
-    "src/lib/scrapers",
     "src/test-scraper.ts"
   ]
 }

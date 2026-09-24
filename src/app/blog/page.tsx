@@ -81,7 +81,7 @@ export default function BlogPage() {
             Stay Updated
           </h2>
           <p className="text-gray-600 mb-8">
-            We're working hard to bring you valuable content. Subscribe to be notified when new articles are published.
+            We&apos;re working hard to bring you valuable content. Subscribe to be notified when new articles are published.
           </p>
           <div className="max-w-md mx-auto">
             <div className="flex gap-4">

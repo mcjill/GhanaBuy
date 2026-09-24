@@ -201,7 +201,7 @@ export default function SearchPage() {
           </div>
         ) : searchQuery && !isLoading ? (
           <div className="text-center py-12">
-            <p className="text-gray-600">No results found for "{searchQuery}"</p>
+            <p className="text-gray-600">No results found for &quot;{searchQuery}&quot;</p>
           </div>
         ) : null}
       </div>
