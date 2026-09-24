@@ -17,6 +17,17 @@ interface SanitizedProduct extends Product {
   termMatchCount: number;
 }
 
+// Per-store outcome returned to the client so failures are visible.
+// `found` counts what the scraper returned; `shown` counts what survived
+// the relevancy and budget filters.
+interface StoreStatus {
+  store: string;
+  ok: boolean;
+  found: number;
+  shown: number;
+  error: string | null;
+}
+
 // Common brands by category
 const PRODUCT_BRANDS = {
   phones: ['iphone', 'samsung', 'huawei', 'xiaomi', 'tecno', 'infinix', 'oppo', 'vivo', 'realme'],
@@ -343,8 +354,9 @@ export async function POST(request: NextRequest) {
 
     const results = await Promise.allSettled(scraperPromises);
 
-    // Collect all successful results
+    // Collect all successful results, and record how each store did
     let allProducts: Product[] = [];
+    const storeStatus: StoreStatus[] = [];
     results.forEach((result, index) => {
       const source = selectedScrapers[index].name;
       if (result.status === 'fulfilled') {
@@ -353,8 +365,22 @@ export async function POST(request: NextRequest) {
           console.log(`[Search API] Processing ${scrapeResult.products.length} products from ${name}`);
           allProducts = [...allProducts, ...scrapeResult.products];
         }
+        storeStatus.push({
+          store: name,
+          ok: scrapeResult.success,
+          found: scrapeResult.success ? scrapeResult.products.length : 0,
+          shown: 0,
+          error: scrapeResult.success ? null : scrapeResult.error || 'Scraper returned no products',
+        });
       } else {
         console.error(`[Search API] ${source} scraper promise rejected:`, result.reason);
+        storeStatus.push({
+          store: source,
+          ok: false,
+          found: 0,
+          shown: 0,
+          error: result.reason instanceof Error ? result.reason.message : 'Scraper crashed',
+        });
       }
     });
 
@@ -393,12 +419,17 @@ export async function POST(request: NextRequest) {
       other: otherProducts.length
     });
 
+    for (const status of storeStatus) {
+      status.shown = filteredAndSortedProducts.filter(p => p.store === status.store).length;
+    }
+
     return NextResponse.json({
       success: true,
       products: {
         highRelevancy: highRelevancyProducts,
         other: otherProducts
-      }
+      },
+      stores: storeStatus
     });
 
   } catch (error) {
